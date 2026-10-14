@@ -32,7 +32,12 @@ with [`uvx`](https://docs.astral.sh/uv/), so there's nothing to install up front
 claude mcp add amazon-orders -- uvx amazon-orders-mcp
 ```
 
-### Codex
+### ChatGPT
+
+**ChatGPT Desktop:** in Settings → Plugins, add an MCP server of type STDIO, with `uvx` as the command and
+`amazon-orders-mcp` as its argument.
+
+**Codex:**
 
 ```sh
 codex mcp add amazon-orders -- uvx amazon-orders-mcp
