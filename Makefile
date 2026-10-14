@@ -1,4 +1,4 @@
-.PHONY: all install nopyc clean test check schema local upload mcpb
+.PHONY: all install nopyc clean test check schema local validate-release upload mcpb
 
 SHELL := /usr/bin/env bash
 PYTHON_BIN ?= python
@@ -53,6 +53,11 @@ local:
 		$(PYTHON_BIN) -m build && \
 		$(PYTHON_BIN) -m pip install "$$(ls dist/*.tar.gz)"; \
 	)
+
+validate-release:
+	@if [[ "${VERSION}" == "" ]]; then echo "VERSION is not set" & exit 1 ; fi
+
+	@if [[ $$(grep "__version__ = \"${VERSION}\"" amazonorders_mcp/__init__.py) == "" ]] ; then echo "Version not bumped in amazonorders_mcp/__init__.py" & exit 1 ; fi
 
 upload: local
 	@( \
