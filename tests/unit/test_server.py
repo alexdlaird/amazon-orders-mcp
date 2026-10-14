@@ -24,10 +24,14 @@ class TestServer(UnitTestCase):
             tools = (await client.list_tools()).tools
 
         # THEN
-        self.assertEqual({"check_session", "get_order_history", "get_order", "get_transactions",
-                          "get_gift_card_activity"}, {tool.name for tool in tools})
+        self.assertEqual({"check_session", "sign_in", "get_config", "update_config", "get_order_history", "get_order",
+                          "get_transactions", "get_gift_card_activity"}, {tool.name for tool in tools})
         for tool in tools:
-            self.assertTrue(tool.annotations.read_only_hint, f"{tool.name} isn't marked read-only")
+            if tool.name in ("sign_in", "update_config"):
+                self.assertFalse(tool.annotations.read_only_hint)
+                self.assertFalse(tool.annotations.destructive_hint)
+            else:
+                self.assertTrue(tool.annotations.read_only_hint, f"{tool.name} isn't marked read-only")
 
     async def test_tools_publish_generated_schema(self):
         # GIVEN
@@ -55,7 +59,8 @@ class TestServer(UnitTestCase):
         # THEN
         self.assertFalse(result.is_error)
         self.assertEqual({"signed_in": False, "site": "https://www.amazon.com",
-                          "sign_in": f"Ask the user to run `{SIGN_IN_COMMAND}` in a terminal."},
+                          "sign_in": f"Offer to sign the user in with `sign_in`, or they can run "
+                                     f"`{SIGN_IN_COMMAND}` in a terminal."},
                          result.structured_content)
 
     async def test_check_session_with_saved_session(self):
@@ -77,7 +82,6 @@ class TestServer(UnitTestCase):
         self.responses.add(responses.GET, self.test_config.constants.ORDER_HISTORY_URL, status=302,
                            headers={"Location": self.test_config.constants.SIGN_IN_URL})
         self.responses.add(responses.GET, self.test_config.constants.SIGN_IN_URL, status=200)
-        signout_response = self.responses.add(responses.GET, self.test_config.constants.SIGN_OUT_URL, status=200)
 
         # WHEN
         result = await self.call_tool("check_session")
@@ -85,9 +89,9 @@ class TestServer(UnitTestCase):
         # THEN
         self.assertFalse(result.is_error)
         self.assertEqual({"signed_in": False, "site": "https://www.amazon.com",
-                          "sign_in": f"Ask the user to run `{SIGN_IN_COMMAND}` in a terminal."},
+                          "sign_in": f"Offer to sign the user in with `sign_in`, or they can run "
+                                     f"`{SIGN_IN_COMMAND}` in a terminal."},
                          result.structured_content)
-        self.assertEqual(1, signout_response.call_count)
 
     async def test_check_session_trusts_saved_session_when_amazon_unreachable(self):
         # GIVEN
@@ -130,7 +134,7 @@ class TestServer(UnitTestCase):
                           "has_more": True}, result.structured_content)
         mock_amazon_orders.return_value.get_order_history_page.assert_called_once_with(
             year=None, start_index=None, full_details=True, time_filter="last30", limit=DEFAULT_LIMIT, cursor=None,
-            progress=ANY)
+            progress_with_total=ANY)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_order_history_from_cursor(self, mock_amazon_orders):
@@ -149,7 +153,7 @@ class TestServer(UnitTestCase):
                          result.structured_content)
         mock_amazon_orders.return_value.get_order_history_page.assert_called_once_with(
             year=None, start_index=None, full_details=False, time_filter=None, limit=None, cursor=cursor,
-            progress=ANY)
+            progress_with_total=ANY)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_order_history_reports_progress(self, mock_amazon_orders):
@@ -157,22 +161,23 @@ class TestServer(UnitTestCase):
         self.given_saved_session()
 
         def get_order_history_page(**kwargs):
-            kwargs["progress"](10)
-            kwargs["progress"](20)
+            kwargs["progress_with_total"](10, 12)
+            kwargs["progress_with_total"](12, 12)
             return PagedResults([], None)
 
         mock_amazon_orders.return_value.get_order_history_page.side_effect = get_order_history_page
         reported = []
 
         async def progress_callback(progress, total, message):
-            reported.append((progress, message))
+            reported.append((progress, total, message))
 
         # WHEN
         result = await self.call_tool("get_order_history", progress_callback=progress_callback)
 
         # THEN
         self.assertFalse(result.is_error)
-        self.assertEqual([(10, "10 Orders found so far ..."), (20, "20 Orders found so far ...")], reported)
+        self.assertEqual([(10, 12, "10 of 12 Orders found so far ..."), (12, 12, "12 of 12 Orders found so far ...")],
+                         reported)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_order(self, mock_amazon_orders):

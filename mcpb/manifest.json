@@ -4,7 +4,7 @@
   "display_name": "Amazon Orders",
   "version": "0.0.0",
   "description": "An MCP server for Amazon order history, line items, and transactions, built on amazon-orders",
-  "long_description": "Reuses the session `amazon-orders login --browser` saves, so the server never signs in itself and never sees credentials. Sign in once in a terminal: `uvx --from \"amazon-orders[browser]\" amazon-orders login --browser`.",
+  "long_description": "Ask your assistant to sign you in, and a browser window opens where you sign in on Amazon's own page, so the server never sees your credentials.",
   "author": {
     "name": "Alex Laird",
     "url": "https://github.com/alexdlaird"
