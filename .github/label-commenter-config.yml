@@ -1,0 +1,43 @@
+labels:
+  - name: invalid-amazon-orders
+    labeled:
+      issue:
+        body: |
+          While `amazon-orders-mcp` is a wrapper for `amazon-orders`, issues with what it reads from Amazon's pages, like missing or wrong order data or signing in, are `amazon-orders` issues, and cannot be triaged here.
+
+          Please [open an issue on `amazon-orders`](https://github.com/alexdlaird/amazon-orders/issues/new/choose) instead.
+
+          If you [support the project](https://github.com/sponsors/alexdlaird), contact me directly and I'd be happy to help you troubleshoot.
+        action: close
+  - name: more-info-needed
+    labeled:
+      issue:
+        body: |
+          Thanks for submitting your issue! It looks like there is not enough detail given for us to be able to troubleshoot.
+
+          If you want us to troubleshoot the issue, we need more information.
+
+          Once we have more information, or a PR to evaluate, we will follow up further on this ticket. Thanks!
+      pr:
+        body: |
+          Thanks for submitting your PR! It looks like there is not enough detail given for us to be able to evaluate it.
+
+          Once we have more information, we will follow up further on this PR. Thanks!
+  - name: too-long
+    labeled:
+      issue:
+        body: |
+          This issue is too long to review as written, so it has not been read.
+
+          A report is only useful if it can be understood quickly, so please edit this one down to the essentials. If an AI tool helped write it, that's fine, but verify it and trim it yourself first. If you haven't read it in full, it's simply not reasonable to expect us to.
+
+          This issue will be reopened once it is evident it has had a human touch.
+        action: close
+      pr:
+        body: |
+          This PR's description is too long to review as written, so it has not been read.
+
+          A change is only reviewable if it can be understood quickly, so please edit the description down to the essentials. If an AI tool helped write it, that's fine, but verify it and trim it yourself first. If you haven't read it in full, it's simply not reasonable to expect us to.
+
+          This PR will be reopened once it is evident it has had a human touch.
+        action: close

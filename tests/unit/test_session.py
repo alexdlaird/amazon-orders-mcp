@@ -1,0 +1,42 @@
+__copyright__ = "Copyright (c) 2026 Alex Laird"
+__license__ = "MIT"
+
+import io
+from contextlib import redirect_stderr, redirect_stdout
+
+from amazonorders.exception import AmazonOrdersAuthError
+
+from amazonorders_mcp.session import StderrIO
+from tests.unittestcase import UnitTestCase
+
+
+class TestSession(UnitTestCase):
+    def test_saved_session_never_submits_sign_in_forms(self):
+        # GIVEN
+        self.given_saved_session()
+
+        # WHEN
+        amazon_session = self.saved_session.run(lambda signed_in_session: signed_in_session)
+
+        # THEN
+        self.assertEqual([], amazon_session.auth_forms)
+
+    def test_echo_writes_to_stderr(self):
+        # GIVEN
+        stdout, stderr = io.StringIO(), io.StringIO()
+
+        # WHEN
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            StderrIO().echo("Some message")
+
+        # THEN
+        self.assertEqual("", stdout.getvalue())
+        self.assertEqual("Some message\n", stderr.getvalue())
+
+    def test_prompt_raises_instead_of_reading_input(self):
+        # WHEN
+        with self.assertRaises(AmazonOrdersAuthError) as cm:
+            StderrIO().prompt("Enter OTP")
+
+        # THEN
+        self.assertIn("Enter OTP", str(cm.exception))

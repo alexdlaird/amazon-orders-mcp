@@ -1,0 +1,48 @@
+name: Validate
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  issues: none
+  pull-requests: none
+
+jobs:
+  validate:
+    name: Validate
+
+    env:
+      FORCE_COLOR: 1
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build test coverage
+        run: make install test
+      - name: Check code
+        run: make check
+      - name: Check schema is current
+        run: make schema && git diff --exit-code amazonorders_mcp/schema.json
+      - name: Validate package
+        run: make local
+      - name: Upload test coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./build/coverage
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./build/test-results
+          report_type: test_results

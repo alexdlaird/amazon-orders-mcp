@@ -1,0 +1,34 @@
+{
+  "manifest_version": "0.4",
+  "name": "amazon-orders-mcp",
+  "display_name": "Amazon Orders",
+  "version": "0.0.0",
+  "description": "An MCP server for Amazon order history, line items, and transactions, built on amazon-orders",
+  "long_description": "Reuses the session `amazon-orders login --browser` saves, so the server never signs in itself and never sees credentials. Sign in once in a terminal: `uvx --from \"amazon-orders[browser]\" amazon-orders login --browser`.",
+  "author": {
+    "name": "Alex Laird",
+    "url": "https://github.com/alexdlaird"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexdlaird/amazon-orders-mcp"
+  },
+  "homepage": "https://github.com/alexdlaird/amazon-orders-mcp",
+  "license": "MIT",
+  "keywords": ["amazon", "order-history", "transactions", "receipts", "mcp", "mcp-server", "model-context-protocol"],
+  "server": {
+    "type": "uv",
+    "entry_point": "src/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "src/server.py"]
+    }
+  },
+  "tools": [],
+  "compatibility": {
+    "platforms": ["darwin", "linux", "win32"],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  }
+}

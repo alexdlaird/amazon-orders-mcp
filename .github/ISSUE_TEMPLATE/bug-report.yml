@@ -1,0 +1,76 @@
+name: 🐛 Bug Report
+description: Found a bug? Help us squash it.
+labels: ["bug"]
+
+body:
+
+- type: markdown
+  attributes:
+    value: |
+      Consider [supporting the project](https://github.com/sponsors/alexdlaird) ❤ to have your request prioritized.
+
+- type: checkboxes
+  id: ack
+  attributes:
+    label: Acknowledgements
+    options:
+    - label: I have written a descriptive issue title
+      required: true
+    - label: I have searched [`amazon-orders-mcp`'s documentation](https://github.com/alexdlaird/amazon-orders-mcp#readme) for an answer
+      required: true
+    - label: I have searched [Issues](issues?q=is%3Aissue) to see if the bug has already been reported
+      required: true
+
+- type: input
+  id: os-version
+  attributes:
+    label: Operating System
+    placeholder: macOS 10.14.5
+  validations:
+    required: true
+
+- type: input
+  id: python-version
+  attributes:
+    label: Python Version
+    placeholder: 3.9.2
+  validations:
+    required: true
+
+- type: input
+  id: library-version
+  attributes:
+    label: amazon-orders-mcp Version
+    placeholder: 1.0.3
+  validations:
+    required: true
+
+- type: input
+  id: summary
+  attributes:
+    label: Summary
+    description: 2-3 sentences on what breaks and when, written by you even if an AI tool helped with the rest.
+  validations:
+    required: true
+
+- type: textarea
+  id: describe-the-bug
+  attributes:
+    label: Describe the Bug
+    description: A clear and concise description of what the bug is, including exceptions thrown. Keep it to a few paragraphs, and attach logs rather than pasting them. Issues too long to review are closed without consideration.
+  validations:
+    required: true
+
+- type: textarea
+  id: steps-to-reproduce
+  attributes:
+    label: Steps to Reproduce
+    description: A snippet of the code used to reproduce the behavior.
+  validations:
+    required: true
+
+- type: textarea
+  id: expected-behavior
+  attributes:
+    label: Expected Behavior
+    description: A brief description of what you expected to happen.

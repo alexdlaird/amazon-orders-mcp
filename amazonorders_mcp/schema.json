@@ -1,0 +1,696 @@
+{
+  "$comment": "AUTO-GENERATED — DO NOT EDIT. Generated from the installed amazon-orders' docstrings and field docs, via: scripts/generate-schema.py (make schema)",
+  "tools": {
+    "get_order_history": {
+      "description": "Get a batch of the Amazon Order history for a given time period, with a cursor to fetch the next batch.",
+      "parameters": {
+        "year": "The year for which to get history. Ignored if `time_filter` or `cursor` is provided. Defaults to the current year if neither `year` nor `time_filter` is specified.",
+        "time_filter": "The time filter to use. Supported values are `\"last30\"` (last 30 days), `\"months-3\"` (past 3 months), or `\"year-YYYY\"` (specific year). If provided, this takes precedence over the `year` parameter.",
+        "start_index": "The index of the Order from which to start fetching in the history. Ignored if `cursor` is provided.",
+        "full_details": "Get the full details for each Order in the batch. This will execute an additional request per Order.",
+        "limit": "Stop fetching history pages once at least this many Orders are collected. Whole pages are fetched, so the batch can hold up to a page more than `limit`. `None` fetches every page.",
+        "cursor": "The `cursor` of the previous batch, to fetch the next one. The filters it was fetched with carry over."
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "The batch of Orders, and the cursor for the next one.",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "An Amazon Order. If desired fields are populated as `None`, ensure `full_details` is `True` when retrieving the Order (for instance, with `get_order_history`), since by default it is `False` (enabling slows down querying).",
+              "properties": {
+                "full_details": {
+                  "type": "boolean",
+                  "description": "If the Orders full details were populated from its details page."
+                },
+                "index": {
+                  "type": "integer",
+                  "description": "Where the Order appeared in the history when it was queried. This will inevitably change (e.g. when a new Order is placed, all indexes will then be off by one), but is still captured as it may be applicable in various use-cases. Populated when the Order was fetched through `get_order_history` (use `start_index` to correlate), or when the `clone` has its `index` set."
+                },
+                "cancelled": {
+                  "type": "boolean",
+                  "description": "`True` if the Order was cancelled. When `True`, fields like `grand_total` and the totals on the details page may be `None` because Amazon stops rendering them."
+                },
+                "is_whole_foods": {
+                  "type": "boolean",
+                  "description": "`True` if this is a Whole Foods Market purchase (an in-store/FOPO purchase or a Whole Foods receipt order). Unlike other unsupported order types, these expose a `grand_total` and (often) an `item_count` on the history page, so those fields are populated."
+                },
+                "shipments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "An Amazon Shipment, which should contain one or more `Item`'s.",
+                    "properties": {
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "description": "An Item in an Amazon `Order`. If desired fields are populated as `None`, ensure `full_details` is `True` when retrieving the Order (for instance, with `get_order_history`), since by default it is `False` (it will slow down querying).",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "description": "The Item title."
+                            },
+                            "link": {
+                              "type": "string",
+                              "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                            },
+                            "asin": {
+                              "type": "string",
+                              "description": "The product ASIN, derived from `link`; `None` when the link is not a product page."
+                            },
+                            "price": {
+                              "type": "number",
+                              "description": "The Item price."
+                            },
+                            "seller": {
+                              "type": "object",
+                              "description": "The Item Seller.",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "description": "The Seller name."
+                                },
+                                "link": {
+                                  "type": "string",
+                                  "description": "The Seller link."
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "condition": {
+                              "type": "string",
+                              "description": "The Item condition."
+                            },
+                            "return_eligible_date": {
+                              "type": "string",
+                              "format": "date",
+                              "description": "The Item return eligible date."
+                            },
+                            "image_link": {
+                              "type": "string",
+                              "description": "The Item image URL."
+                            },
+                            "quantity": {
+                              "type": "integer",
+                              "description": "The Item quantity. `None` when the page shows none, and for items sold by weight (e.g. Whole Foods), which have no whole-unit count."
+                            }
+                          },
+                          "additionalProperties": true
+                        },
+                        "description": "The Shipment Items."
+                      },
+                      "delivery_status": {
+                        "type": "string",
+                        "description": "The Shipment delivery status."
+                      },
+                      "tracking_link": {
+                        "type": "string",
+                        "description": "The Shipment tracking link."
+                      },
+                      "shipment_id": {
+                        "type": "string",
+                        "description": "Amazon's identifier for the Shipment, taken from `tracking_link`. `None` when there is no tracking link (Amazon stops showing it on older Orders), or the link carries no Shipment ID. Pass it to `get_tracking`."
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  "description": "The Order Shipments."
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "An Item in an Amazon `Order`. If desired fields are populated as `None`, ensure `full_details` is `True` when retrieving the Order (for instance, with `get_order_history`), since by default it is `False` (it will slow down querying).",
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "description": "The Item title."
+                      },
+                      "link": {
+                        "type": "string",
+                        "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                      },
+                      "asin": {
+                        "type": "string",
+                        "description": "The product ASIN, derived from `link`; `None` when the link is not a product page."
+                      },
+                      "price": {
+                        "type": "number",
+                        "description": "The Item price."
+                      },
+                      "seller": {
+                        "type": "object",
+                        "description": "The Item Seller.",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The Seller name."
+                          },
+                          "link": {
+                            "type": "string",
+                            "description": "The Seller link."
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "condition": {
+                        "type": "string",
+                        "description": "The Item condition."
+                      },
+                      "return_eligible_date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "The Item return eligible date."
+                      },
+                      "image_link": {
+                        "type": "string",
+                        "description": "The Item image URL."
+                      },
+                      "quantity": {
+                        "type": "integer",
+                        "description": "The Item quantity. `None` when the page shows none, and for items sold by weight (e.g. Whole Foods), which have no whole-unit count."
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  "description": "The Order Items."
+                },
+                "order_number": {
+                  "type": "string",
+                  "description": "The Order number. May be `None` only when the Order is `cancelled` and Amazon stripped the order number from the details page (the `order_number` parameter is used as a fallback in that case)."
+                },
+                "order_details_link": {
+                  "type": "string",
+                  "description": "The Order details link."
+                },
+                "grand_total": {
+                  "type": "number",
+                  "description": "The Order grand total."
+                },
+                "order_placed_date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "The Order placed date."
+                },
+                "recipient": {
+                  "type": "object",
+                  "description": "The Order Recipients.",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "The Recipient name."
+                    },
+                    "address": {
+                      "type": "string",
+                      "description": "The Recipient address."
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "item_count": {
+                  "type": "integer",
+                  "description": "The number of items in the purchase, when Amazon summarizes the count instead of listing the items (e.g. Whole Foods Market orders show \"N items in this purchase\"). `None` when no such summary is shown."
+                },
+                "payment_method": {
+                  "type": "string",
+                  "description": "The Order payment method. Only populated when `full_details` is `True`. For Whole Foods Market orders this is the card brand of the first payment method on the receipt (e.g. \"Visa\")."
+                },
+                "payment_method_last_4": {
+                  "type": "string",
+                  "description": "The Order payment method's last 4 digits, preserved verbatim so leading zeros are not lost. Only populated when `full_details` is `True`."
+                },
+                "subtotal": {
+                  "type": "number",
+                  "description": "The Order subtotal. Only populated when `full_details` is `True`."
+                },
+                "shipping_total": {
+                  "type": "number",
+                  "description": "The Order shipping total. Only populated when `full_details` is `True`."
+                },
+                "free_shipping": {
+                  "type": "number",
+                  "description": "The Order free shipping, as a negative amount. Only populated when `full_details` is `True`."
+                },
+                "promotion_applied": {
+                  "type": "number",
+                  "description": "The Order promotion applied, as a negative amount. Only populated when `full_details` is `True`."
+                },
+                "coupon_savings": {
+                  "type": "number",
+                  "description": "The Order coupon savings, as a negative amount. Only populated when `full_details` is `True`."
+                },
+                "reward_points": {
+                  "type": "number",
+                  "description": "The Order reward points, as a negative amount of currency (not a count of points). Only populated when `full_details` is `True`."
+                },
+                "subscription_discount": {
+                  "type": "number",
+                  "description": "The Order Subscribe & Save discount, as a negative amount. Only populated when `full_details` is `True`."
+                },
+                "total_before_tax": {
+                  "type": "number",
+                  "description": "The Order total before tax. Only populated when `full_details` is `True`."
+                },
+                "estimated_tax": {
+                  "type": "number",
+                  "description": "The Order estimated tax. Only populated when `full_details` is `True`. For Whole Foods Market orders this is the \"Tax and Fees\" total from the receipt."
+                },
+                "refund_total": {
+                  "type": "number",
+                  "description": "The Order refund total. Only populated when `full_details` is `True`."
+                },
+                "multibuy_discount": {
+                  "type": "number",
+                  "description": "The Multibuy discount, as a negative amount. Only populated when `full_details` is `True`."
+                },
+                "amazon_discount": {
+                  "type": "number",
+                  "description": "The Amazon discount, as a negative amount. Only populated when `full_details` is `True`."
+                },
+                "gift_card": {
+                  "type": "number",
+                  "description": "The Gift Card total (rendered as \"Gift Card\" on digital order details pages), as a negative amount. Only populated when `full_details` is `True`."
+                },
+                "gift_wrap": {
+                  "type": "number",
+                  "description": "The Gift Wrap total. Only populated when `full_details` is `True`."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "The results in this batch."
+          },
+          "cursor": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Pass this back as `cursor` to the same call to fetch the next batch. A JSON-safe `dict` to keep as it is, not to build or change. `None` when there are no more results."
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "`True` if there are more results to fetch with `cursor`."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "get_order": {
+      "description": "Get the full details for a given Amazon Order ID.",
+      "parameters": {
+        "order_id": "The Amazon Order ID to lookup."
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "The requested Order.",
+        "properties": {
+          "full_details": {
+            "type": "boolean",
+            "description": "If the Orders full details were populated from its details page."
+          },
+          "index": {
+            "type": "integer",
+            "description": "Where the Order appeared in the history when it was queried. This will inevitably change (e.g. when a new Order is placed, all indexes will then be off by one), but is still captured as it may be applicable in various use-cases. Populated when the Order was fetched through `get_order_history` (use `start_index` to correlate), or when the `clone` has its `index` set."
+          },
+          "cancelled": {
+            "type": "boolean",
+            "description": "`True` if the Order was cancelled. When `True`, fields like `grand_total` and the totals on the details page may be `None` because Amazon stops rendering them."
+          },
+          "is_whole_foods": {
+            "type": "boolean",
+            "description": "`True` if this is a Whole Foods Market purchase (an in-store/FOPO purchase or a Whole Foods receipt order). Unlike other unsupported order types, these expose a `grand_total` and (often) an `item_count` on the history page, so those fields are populated."
+          },
+          "shipments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "An Amazon Shipment, which should contain one or more `Item`'s.",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "An Item in an Amazon `Order`. If desired fields are populated as `None`, ensure `full_details` is `True` when retrieving the Order (for instance, with `get_order_history`), since by default it is `False` (it will slow down querying).",
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "description": "The Item title."
+                      },
+                      "link": {
+                        "type": "string",
+                        "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                      },
+                      "asin": {
+                        "type": "string",
+                        "description": "The product ASIN, derived from `link`; `None` when the link is not a product page."
+                      },
+                      "price": {
+                        "type": "number",
+                        "description": "The Item price."
+                      },
+                      "seller": {
+                        "type": "object",
+                        "description": "The Item Seller.",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "The Seller name."
+                          },
+                          "link": {
+                            "type": "string",
+                            "description": "The Seller link."
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "condition": {
+                        "type": "string",
+                        "description": "The Item condition."
+                      },
+                      "return_eligible_date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "The Item return eligible date."
+                      },
+                      "image_link": {
+                        "type": "string",
+                        "description": "The Item image URL."
+                      },
+                      "quantity": {
+                        "type": "integer",
+                        "description": "The Item quantity. `None` when the page shows none, and for items sold by weight (e.g. Whole Foods), which have no whole-unit count."
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  "description": "The Shipment Items."
+                },
+                "delivery_status": {
+                  "type": "string",
+                  "description": "The Shipment delivery status."
+                },
+                "tracking_link": {
+                  "type": "string",
+                  "description": "The Shipment tracking link."
+                },
+                "shipment_id": {
+                  "type": "string",
+                  "description": "Amazon's identifier for the Shipment, taken from `tracking_link`. `None` when there is no tracking link (Amazon stops showing it on older Orders), or the link carries no Shipment ID. Pass it to `get_tracking`."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "The Order Shipments."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "An Item in an Amazon `Order`. If desired fields are populated as `None`, ensure `full_details` is `True` when retrieving the Order (for instance, with `get_order_history`), since by default it is `False` (it will slow down querying).",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "description": "The Item title."
+                },
+                "link": {
+                  "type": "string",
+                  "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                },
+                "asin": {
+                  "type": "string",
+                  "description": "The product ASIN, derived from `link`; `None` when the link is not a product page."
+                },
+                "price": {
+                  "type": "number",
+                  "description": "The Item price."
+                },
+                "seller": {
+                  "type": "object",
+                  "description": "The Item Seller.",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "The Seller name."
+                    },
+                    "link": {
+                      "type": "string",
+                      "description": "The Seller link."
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "condition": {
+                  "type": "string",
+                  "description": "The Item condition."
+                },
+                "return_eligible_date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "The Item return eligible date."
+                },
+                "image_link": {
+                  "type": "string",
+                  "description": "The Item image URL."
+                },
+                "quantity": {
+                  "type": "integer",
+                  "description": "The Item quantity. `None` when the page shows none, and for items sold by weight (e.g. Whole Foods), which have no whole-unit count."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "The Order Items."
+          },
+          "order_number": {
+            "type": "string",
+            "description": "The Order number. May be `None` only when the Order is `cancelled` and Amazon stripped the order number from the details page (the `order_number` parameter is used as a fallback in that case)."
+          },
+          "order_details_link": {
+            "type": "string",
+            "description": "The Order details link."
+          },
+          "grand_total": {
+            "type": "number",
+            "description": "The Order grand total."
+          },
+          "order_placed_date": {
+            "type": "string",
+            "format": "date",
+            "description": "The Order placed date."
+          },
+          "recipient": {
+            "type": "object",
+            "description": "The Order Recipients.",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The Recipient name."
+              },
+              "address": {
+                "type": "string",
+                "description": "The Recipient address."
+              }
+            },
+            "additionalProperties": true
+          },
+          "item_count": {
+            "type": "integer",
+            "description": "The number of items in the purchase, when Amazon summarizes the count instead of listing the items (e.g. Whole Foods Market orders show \"N items in this purchase\"). `None` when no such summary is shown."
+          },
+          "payment_method": {
+            "type": "string",
+            "description": "The Order payment method. Only populated when `full_details` is `True`. For Whole Foods Market orders this is the card brand of the first payment method on the receipt (e.g. \"Visa\")."
+          },
+          "payment_method_last_4": {
+            "type": "string",
+            "description": "The Order payment method's last 4 digits, preserved verbatim so leading zeros are not lost. Only populated when `full_details` is `True`."
+          },
+          "subtotal": {
+            "type": "number",
+            "description": "The Order subtotal. Only populated when `full_details` is `True`."
+          },
+          "shipping_total": {
+            "type": "number",
+            "description": "The Order shipping total. Only populated when `full_details` is `True`."
+          },
+          "free_shipping": {
+            "type": "number",
+            "description": "The Order free shipping, as a negative amount. Only populated when `full_details` is `True`."
+          },
+          "promotion_applied": {
+            "type": "number",
+            "description": "The Order promotion applied, as a negative amount. Only populated when `full_details` is `True`."
+          },
+          "coupon_savings": {
+            "type": "number",
+            "description": "The Order coupon savings, as a negative amount. Only populated when `full_details` is `True`."
+          },
+          "reward_points": {
+            "type": "number",
+            "description": "The Order reward points, as a negative amount of currency (not a count of points). Only populated when `full_details` is `True`."
+          },
+          "subscription_discount": {
+            "type": "number",
+            "description": "The Order Subscribe & Save discount, as a negative amount. Only populated when `full_details` is `True`."
+          },
+          "total_before_tax": {
+            "type": "number",
+            "description": "The Order total before tax. Only populated when `full_details` is `True`."
+          },
+          "estimated_tax": {
+            "type": "number",
+            "description": "The Order estimated tax. Only populated when `full_details` is `True`. For Whole Foods Market orders this is the \"Tax and Fees\" total from the receipt."
+          },
+          "refund_total": {
+            "type": "number",
+            "description": "The Order refund total. Only populated when `full_details` is `True`."
+          },
+          "multibuy_discount": {
+            "type": "number",
+            "description": "The Multibuy discount, as a negative amount. Only populated when `full_details` is `True`."
+          },
+          "amazon_discount": {
+            "type": "number",
+            "description": "The Amazon discount, as a negative amount. Only populated when `full_details` is `True`."
+          },
+          "gift_card": {
+            "type": "number",
+            "description": "The Gift Card total (rendered as \"Gift Card\" on digital order details pages), as a negative amount. Only populated when `full_details` is `True`."
+          },
+          "gift_wrap": {
+            "type": "number",
+            "description": "The Gift Wrap total. Only populated when `full_details` is `True`."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "get_transactions": {
+      "description": "Get a batch of Amazon Transaction history for a given number of days, or for a single Order, with a cursor to fetch the next batch.",
+      "parameters": {
+        "days": "The number of days worth of Transactions to get. Ignored when `order_id` or `cursor` is given.",
+        "order_id": "If given, only Transactions for this Amazon Order ID are returned, as in `get_transactions`. Ignored when `cursor` is given.",
+        "limit": "Stop fetching Transaction pages once at least this many Transactions are collected. Whole pages are fetched, so the batch can hold up to a page more than `limit`. `None` fetches every page.",
+        "cursor": "The `cursor` of the previous batch, to fetch the next one. The `days` window or `order_id` it was fetched with carries over."
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "The batch of Transactions, and the cursor for the next one.",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "An Amazon Transaction.",
+              "properties": {
+                "completed_date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "The Transaction completed date."
+                },
+                "payment_method": {
+                  "type": "string",
+                  "description": "The Transaction payment method."
+                },
+                "payment_method_last_4": {
+                  "type": "string",
+                  "description": "The Transaction payment method's last digits, parsed from `payment_method`. `None` if no masked digits."
+                },
+                "grand_total": {
+                  "type": "number",
+                  "description": "The Transaction grand total, negative for a charge and positive for a refund."
+                },
+                "is_refund": {
+                  "type": "boolean",
+                  "description": "The Transaction was a refund or not."
+                },
+                "order_number": {
+                  "type": "string",
+                  "description": "The Transaction Order number, or `None` when the row carries no Order number."
+                },
+                "order_details_link": {
+                  "type": "string",
+                  "description": "The Transaction Order details link."
+                },
+                "seller": {
+                  "type": "string",
+                  "description": "The Transaction seller name, or `None` when the row carries none."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "The results in this batch."
+          },
+          "cursor": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Pass this back as `cursor` to the same call to fetch the next batch. A JSON-safe `dict` to keep as it is, not to build or change. `None` when there are no more results."
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "`True` if there are more results to fetch with `cursor`."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "get_gift_card_activity": {
+      "description": "Get Amazon Gift Card activity for a given number of days.",
+      "parameters": {
+        "days": "The number of days worth of Gift Card activity to get."
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "A list of the requested GiftCardActivity, newest first.",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "An entry in the Amazon Gift Card activity ledger, such as a Gift Card applied to an Order, a claim code redemption, a Reload, or a refund.",
+              "properties": {
+                "activity_date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "The GiftCardActivity date."
+                },
+                "description": {
+                  "type": "string",
+                  "description": "The GiftCardActivity description."
+                },
+                "amount": {
+                  "type": "number",
+                  "description": "The GiftCardActivity amount, negative when the balance was debited and positive when it was credited."
+                },
+                "is_credit": {
+                  "type": "boolean",
+                  "description": "The GiftCardActivity credited the balance or not."
+                },
+                "closing_balance": {
+                  "type": "number",
+                  "description": "The Gift Card balance after this GiftCardActivity."
+                },
+                "order_number": {
+                  "type": "string",
+                  "description": "The Order number the GiftCardActivity references, or `None` when the row links no Order."
+                },
+                "order_details_link": {
+                  "type": "string",
+                  "description": "The Order details link, or `None` when the row links no Order."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "A list of the requested GiftCardActivity, newest first."
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

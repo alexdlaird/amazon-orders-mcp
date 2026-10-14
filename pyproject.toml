@@ -1,0 +1,123 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amazon-orders-mcp"
+dynamic = ["version"]
+description = "An MCP server for Amazon order history, line items, and transactions, built on amazon-orders"
+readme = "README.md"
+license = "MIT"
+keywords = ["amazon", "order-history", "transactions", "receipts", "mcp", "mcp-server", "model-context-protocol"]
+authors = [{ name = "Alex Laird", email = "contact@alexlaird.com" }]
+maintainers = [{ name = "Alex Laird", email = "contact@alexlaird.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "amazon-orders[browser]>=4.9.0,<5",
+    "mcp>=2.3,<3",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "coverage[toml]",
+    "flake8",
+    "flake8-pyproject",
+    "pep8-naming",
+    "mypy",
+    "responses",
+]
+schema = [
+    "Sphinx",
+    "docstring_parser",
+]
+
+[project.scripts]
+amazon-orders-mcp = "amazonorders_mcp.server:main"
+
+[project.urls]
+Changelog = "https://github.com/alexdlaird/amazon-orders-mcp/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/alexdlaird/amazon-orders-mcp#readme"
+Sponsor = "https://github.com/sponsors/alexdlaird"
+"Source Code" = "https://github.com/alexdlaird/amazon-orders-mcp"
+
+[tool.setuptools]
+package-dir = { amazonorders_mcp = "amazonorders_mcp" }
+
+[tool.setuptools.package-data]
+amazonorders_mcp = ["schema.json"]
+
+[tool.setuptools.dynamic]
+version = { attr = "amazonorders_mcp.__version__" }
+
+[tool.pytest.ini_options]
+junit_family = "legacy"
+addopts = [
+    "-s",
+    "--ignore=venv",
+    "--durations=0",
+    "--durations-min=0.5",
+    "--junitxml=build/test-results/junit.xml"
+]
+
+[tool.coverage.run]
+omit = [
+    "venv/**",
+    "*/tests/**"
+]
+
+[tool.coverage.report]
+precision = 2
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.coverage.xml]
+output = "build/coverage/coverage.xml"
+
+[tool.coverage.html]
+title = "Coverage Report"
+directory = "build/coverage"
+
+[tool.flake8]
+max-line-length = 119
+statistics = true
+exclude = "venv/*,build/*,dist/*,.egg-info/*,.mypy_cache/*,.claude/*"
+
+[tool.mypy]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+disallow_subclassing_any = true
+warn_redundant_casts = true
+warn_unreachable = true
+warn_unused_configs = true
+strict_equality = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "redundant-self", "truthy-bool", "unused-awaitable"]
+
+[[tool.mypy.overrides]]
+module = "amazonorders.*"
+follow_untyped_imports = true
