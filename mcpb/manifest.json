@@ -14,7 +14,9 @@
     "url": "https://github.com/alexdlaird/amazon-orders-mcp"
   },
   "homepage": "https://github.com/alexdlaird/amazon-orders-mcp",
+  "icon": "icon.png",
   "license": "MIT",
+  "privacy_policies": ["https://www.amazon.com/gp/help/customer/display.html?nodeId=GX7NJQ4ZB8MHFRNJ"],
   "keywords": ["amazon", "order-history", "transactions", "receipts", "mcp", "mcp-server", "model-context-protocol"],
   "server": {
     "type": "uv",

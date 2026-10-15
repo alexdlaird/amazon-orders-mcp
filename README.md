@@ -5,12 +5,16 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/alexdlaird/amazon-orders-mcp/build.yml)](https://github.com/alexdlaird/amazon-orders-mcp/actions/workflows/build.yml)
 [![GitHub License](https://img.shields.io/github/license/alexdlaird/amazon-orders-mcp)](https://github.com/alexdlaird/amazon-orders-mcp/blob/main/LICENSE)
 
+<!-- mcp-name: io.github.alexdlaird/amazon-orders-mcp -->
+
 `amazon-orders-mcp` is an unofficial [MCP](https://modelcontextprotocol.io) server for Amazon order history, line items,
 and transactions, built on [`amazon-orders`](https://github.com/alexdlaird/amazon-orders). It gives your AI assistant
 tools for your Amazon account, available from Claude and any other MCP client.
 
 The server never sees your credentials. When you sign in, a browser window opens on Amazon's own page, and the server
-reuses the session that leaves behind.
+reuses the session that leaves behind. Signing in needs a display, so run the server on the machine you sign in on. On a
+machine without one, like a server or a container, use [`amazon-orders`](https://github.com/alexdlaird/amazon-orders)
+directly, with [automated authentication](https://amazon-orders.readthedocs.io/#automating-authentication).
 
 > **Note:** This server reads its data through `amazon-orders`, which works by parsing data from Amazon's
 > consumer-facing website. As Amazon provides no official API to use, older versions may break at any time, so it's
@@ -32,7 +36,12 @@ with [`uvx`](https://docs.astral.sh/uv/), so there's nothing to install up front
 claude mcp add amazon-orders -- uvx amazon-orders-mcp
 ```
 
-### Codex
+### ChatGPT
+
+**ChatGPT Desktop:** in Settings → Plugins, add an MCP server of type STDIO, with `uvx` as the command and
+`amazon-orders-mcp` as its argument.
+
+**Codex:**
 
 ```sh
 codex mcp add amazon-orders -- uvx amazon-orders-mcp

@@ -59,6 +59,9 @@ jobs:
       - name: Build MCPB bundle
         run: make mcpb PYTHON_BIN=venv/bin/python
 
+      - name: Build MCP Registry server.json
+        run: make server-json PYTHON_BIN=venv/bin/python
+
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
@@ -83,7 +86,8 @@ jobs:
             --target "$SHA" \
             --title "$VERSION" \
             --notes "$RELEASE_NOTES" \
-            "build/amazon-orders-mcp-${VERSION}.mcpb"
+            "build/amazon-orders-mcp-${VERSION}.mcpb" \
+            "build/server.json"
 
   cleanup:
     needs: [prereq, release]

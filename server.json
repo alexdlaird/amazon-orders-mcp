@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.alexdlaird/amazon-orders-mcp",
+  "title": "Amazon Orders",
+  "description": "An MCP server for Amazon order history, line items, and transactions, built on amazon-orders",
+  "repository": {
+    "url": "https://github.com/alexdlaird/amazon-orders-mcp",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "amazon-orders-mcp",
+      "version": "0.0.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

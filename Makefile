@@ -1,4 +1,4 @@
-.PHONY: all install nopyc clean test check schema local validate-release upload mcpb
+.PHONY: all install nopyc clean test check schema local validate-release upload mcpb server-json
 
 SHELL := /usr/bin/env bash
 PYTHON_BIN ?= python
@@ -72,3 +72,6 @@ mcpb:
 		npx -y @anthropic-ai/mcpb@$(MCPB_VERSION) validate build/mcpb/manifest.json && \
 		npx -y @anthropic-ai/mcpb@$(MCPB_VERSION) pack build/mcpb "build/amazon-orders-mcp-$$($(PYTHON_BIN) -c 'import amazonorders_mcp; print(amazonorders_mcp.__version__)').mcpb"; \
 	)
+
+server-json:
+	$(PYTHON_BIN) scripts/build-server-json.py

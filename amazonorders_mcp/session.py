@@ -107,6 +107,8 @@ class SavedSession:
         except AmazonOrdersAuthError:
             logger.debug("Amazon rejected the saved session, so it will be loaded again from disk on the next call")
 
+            if self._amazon_session is not None:
+                self._loaded_cookie_jar_mtime = self._amazon_session.cookie_jar_mtime
             self._amazon_session = None
 
             raise
@@ -149,7 +151,7 @@ class SavedSession:
                 self.sign_in_status = WAITING_TO_SIGN_IN_STATUS
                 browser_login.login(timeout)
             finally:
-                self._loaded_cookie_jar_mtime = _cookie_jar_mtime(amazon_session.config)
+                self._loaded_cookie_jar_mtime = amazon_session.cookie_jar_mtime
 
     def get_config(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -239,8 +241,8 @@ class SavedSession:
         if self._amazon_session is None:
             if self.config is None:
                 self.config = AmazonOrdersConfig()
-            self._loaded_cookie_jar_mtime = _cookie_jar_mtime(self.config)
             amazon_session = AmazonSession(io=StderrIO(), config=self.config)
+            self._loaded_cookie_jar_mtime = amazon_session.cookie_jar_mtime
             self._amazon_session = self._reuse_only(amazon_session)
 
         return self._amazon_session
