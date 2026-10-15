@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.1.0...HEAD)
 
+- Bug fixes and stability improvements.
+
 ## [1.1.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.0.0...1.1.0) - 2026-10-14
 
 ### Added
