@@ -1,0 +1,15 @@
+.git
+.github
+.claude
+.idea
+.vscode
+venv
+build
+dist
+*.egg-info
+**/__pycache__
+.mypy_cache
+.pytest_cache
+mcpb
+scripts
+tests
