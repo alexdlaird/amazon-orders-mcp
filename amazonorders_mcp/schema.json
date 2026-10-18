@@ -6,6 +6,7 @@
       "parameters": {
         "year": "The year for which to get history. Ignored if `time_filter` or `cursor` is provided. Defaults to the current year if neither `year` nor `time_filter` is specified.",
         "time_filter": "The time filter to use. Supported values are `\"last30\"` (last 30 days), `\"months-3\"` (past 3 months), or `\"year-YYYY\"` (specific year). If provided, this takes precedence over the `year` parameter.",
+        "order_filter": "The order type filter to use, e.g. `\"digital-orders\"` for Kindle and other digital purchases, which the default history doesn't include. If provided, appended alongside the time filter.",
         "start_index": "The index of the Order from which to start fetching in the history. Ignored if `cursor` is provided.",
         "full_details": "Get the full details for each Order in the batch. This will execute an additional request per Order.",
         "limit": "Stop fetching history pages once at least this many Orders are collected. Whole pages are fetched, so the batch can hold up to a page more than `limit`. `None` fetches every page.",
@@ -563,6 +564,28 @@
           "gift_wrap": {
             "type": "number",
             "description": "The Gift Wrap total. Only populated when `full_details` is `True`."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "get_tracking": {
+      "description": "Get the carrier and tracking number of a Shipment from its package tracking page.",
+      "parameters": {
+        "order_id": "The Amazon Order ID of the Shipment.",
+        "shipment_id": "The Shipment's `shipment_id`. Amazon stops showing the tracking link it comes from on older Orders."
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "The requested Tracking. Its fields are `None` when the page only shows the delivery milestones (no carrier tracking).",
+        "properties": {
+          "carrier": {
+            "type": "string",
+            "description": "The carrier name, e.g. `UPS`, or `Amazon` for Amazon's own delivery network."
+          },
+          "tracking_number": {
+            "type": "string",
+            "description": "The carrier's tracking number, e.g. `1Z999AA10123456784` or `TBA000000000000`. Always a `str`, since many (e.g. USPS) are all digits and may have leading zeros."
           }
         },
         "additionalProperties": true

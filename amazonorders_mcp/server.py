@@ -9,6 +9,7 @@ from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, Typ
 import anyio
 from amazonorders.entity.gift_card_activity import GiftCardActivity
 from amazonorders.entity.order import Order
+from amazonorders.entity.tracking import Tracking
 from amazonorders.entity.transaction import Transaction
 from amazonorders.exception import AmazonOrdersAuthError, AmazonOrdersBrowserNotInstalledError, AmazonOrdersError
 from amazonorders.gift_cards import AmazonGiftCards
@@ -26,6 +27,7 @@ from amazonorders_mcp.schema import (
     GiftCardActivityList,
     OrderDetails,
     OrderHistoryPage,
+    TrackingDetails,
     TransactionsPage,
     parameter_field,
     tool_description,
@@ -36,9 +38,10 @@ logger = logging.getLogger(__name__)
 
 #: What the server can do, given to the client when it connects.
 INSTRUCTIONS = (
-    "Reads the user's Amazon order history, transactions, and Gift Card activity. Every tool but `sign_in` and "
-    "`update_config` is read-only. If a tool says the user isn't signed in, offer to sign them in with `sign_in`, and "
-    f"call it only once they agree. If that can't work, they can run `{SIGN_IN_COMMAND}` in a terminal instead."
+    "Reads the user's Amazon order history, package tracking, transactions, and Gift Card balance and activity. "
+    "Every tool but `sign_in` and `update_config` is read-only. If a tool says the user isn't signed in, offer to "
+    "sign them in with `sign_in`, and call it only once they agree. If that can't work, they can run "
+    f"`{SIGN_IN_COMMAND}` in a terminal instead."
 )
 
 #: The annotations every tool has, since none of them change anything on Amazon.
@@ -72,6 +75,15 @@ class SessionStatus(BaseModel):
                                         "be reached to check, a saved session is assumed to still work.")
     site: str = Field(description="The Amazon site the server is set to read.")
     sign_in: Optional[str] = Field(default=None, description="What to do to sign in, if the user isn't.")
+
+
+class GiftCardBalance(BaseModel):
+    """
+    The user's Amazon Gift Card balance, returned by the ``get_gift_card_balance`` tool.
+    """
+
+    balance: float = Field(description="The current Gift Card balance, in the currency of the Amazon site the "
+                                       "server is set to read (see `check_session`).")
 
 
 class ConfigValues(BaseModel):
@@ -160,6 +172,7 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
             ctx: Context,
             year: Annotated[Optional[int], parameter_field("get_order_history", "year")] = None,
             time_filter: Annotated[Optional[str], parameter_field("get_order_history", "time_filter")] = None,
+            order_filter: Annotated[Optional[str], parameter_field("get_order_history", "order_filter")] = None,
             start_index: Annotated[Optional[int], parameter_field("get_order_history", "start_index")] = None,
             full_details: Annotated[bool, parameter_field("get_order_history", "full_details")] = False,
             limit: Annotated[Optional[int], parameter_field("get_order_history", "limit")] = DEFAULT_LIMIT,
@@ -172,6 +185,7 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
                                                                        start_index=start_index,
                                                                        full_details=full_details,
                                                                        time_filter=time_filter,
+                                                                       order_filter=order_filter,
                                                                        limit=limit,
                                                                        cursor=cursor,
                                                                        progress_with_total=progress)
@@ -191,6 +205,19 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         order = await run(get)
 
         return OrderDetails.model_validate(order.to_dict(exclude_none=True))
+
+    @server.tool(annotations=READ_ONLY,
+                 description=tool_description("get_tracking"))
+    async def get_tracking(
+            order_id: Annotated[str, parameter_field("get_tracking", "order_id")],
+            shipment_id: Annotated[str, parameter_field("get_tracking", "shipment_id")]
+    ) -> TrackingDetails:
+        def get(amazon_session: AmazonSession) -> Tracking:
+            return AmazonOrders(amazon_session).get_tracking(order_id, shipment_id)
+
+        tracking = await run(get)
+
+        return TrackingDetails.model_validate(tracking.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_transactions"))
@@ -229,6 +256,15 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
 
         return GiftCardActivityList.model_validate(
             {"items": [activity.to_dict(exclude_none=True) for activity in activities]})
+
+    @server.tool(annotations=READ_ONLY,
+                 description="Get the user's current Amazon Gift Card balance. For what was spent or added, and "
+                             "when, use `get_gift_card_activity`.")
+    async def get_gift_card_balance() -> GiftCardBalance:
+        def get(amazon_session: AmazonSession) -> float:
+            return AmazonGiftCards(amazon_session).get_balance()
+
+        return GiftCardBalance(balance=await run(get))
 
     @server.tool(annotations=READ_ONLY,
                  description="Get the settings that can be changed with `update_config`, and their values. "

@@ -63,6 +63,10 @@ class OrderDetails(ToolOutput):
     tool = "get_order"
 
 
+class TrackingDetails(ToolOutput):
+    tool = "get_tracking"
+
+
 class TransactionsPage(ToolOutput):
     tool = "get_transactions"
 
