@@ -17,6 +17,7 @@ from amazonorders.entity.parsable import Parsable
 from amazonorders.entity.recipient import Recipient
 from amazonorders.entity.seller import Seller
 from amazonorders.entity.shipment import Shipment
+from amazonorders.entity.tracking import Tracking
 from amazonorders.entity.transaction import Transaction
 from amazonorders.gift_cards import AmazonGiftCards
 from amazonorders.orders import AmazonOrders
@@ -29,7 +30,7 @@ SCHEMA_PATH = os.path.join(ROOT_DIR, "amazonorders_mcp", "schema.json")
 SCHEMA_COMMENT = ("AUTO-GENERATED — DO NOT EDIT. Generated from the installed amazon-orders' docstrings and field "
                   "docs, via: scripts/generate-schema.py (make schema)")
 
-ENTITIES: List[Type[Parsable]] = [Order, Shipment, Item, Seller, Recipient, Transaction, GiftCardActivity]
+ENTITIES: List[Type[Parsable]] = [Order, Shipment, Item, Seller, Recipient, Tracking, Transaction, GiftCardActivity]
 
 PRIMITIVE_SCHEMAS = {
     "bool": {"type": "boolean"},
@@ -67,9 +68,11 @@ class Tool(NamedTuple):
 
 TOOLS = [
     Tool("get_order_history", AmazonOrders.get_order_history_page,
-         ["year", "time_filter", "start_index", "full_details", "limit", "cursor"], Order, "page",
-         parameter_calls={"time_filter": AmazonOrders.get_order_history}),
+         ["year", "time_filter", "order_filter", "start_index", "full_details", "limit", "cursor"], Order, "page",
+         parameter_calls={"time_filter": AmazonOrders.get_order_history,
+                          "order_filter": AmazonOrders.get_order_history}),
     Tool("get_order", AmazonOrders.get_order, ["order_id"], Order, "entity"),
+    Tool("get_tracking", AmazonOrders.get_tracking, ["order_id", "shipment_id"], Tracking, "entity"),
     Tool("get_transactions", AmazonTransactions.get_transactions_page, ["days", "order_id", "limit", "cursor"],
          Transaction, "page"),
     Tool("get_gift_card_activity", AmazonGiftCards.get_gift_card_activity, ["days"], GiftCardActivity, "list"),

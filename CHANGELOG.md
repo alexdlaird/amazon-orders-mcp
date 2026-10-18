@@ -6,6 +6,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.2.0...HEAD)
 
+### Added
+
+- A `get_tracking` tool, for a shipment's carrier and tracking number.
+- A `get_gift_card_balance` tool, for the current Gift Card balance.
+- `order_filter` on `get_order_history`, e.g. `digital-orders` for Kindle and other digital purchases.
+
 ## [1.2.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.1.0...1.2.0) - 2026-10-15
 
 - Bug fixes and stability improvements.
