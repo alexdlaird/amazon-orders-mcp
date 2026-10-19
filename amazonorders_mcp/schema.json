@@ -756,6 +756,49 @@
         "additionalProperties": true
       }
     },
+    "get_prime_payments": {
+      "description": "Get every charge in the Prime membership payment history.",
+      "parameters": {},
+      "output_schema": {
+        "type": "object",
+        "description": "A list of the PrimePayments, newest first.",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A charge in the Prime membership payment history: the membership fee Amazon billed on a sign-up or renewal date. Each charge is a digital Order (a `D01-` ID) that neither the Order history nor the Digital Orders tab lists, so this entity is the index to it. The Order itself is fetched by `order_number` with `get_order`, which renders the standard Order details layout for these IDs.",
+              "properties": {
+                "payment_date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "The date the membership fee was charged, not the start of the membership period it covers."
+                },
+                "grand_total": {
+                  "type": "number",
+                  "description": "The amount charged, tax included."
+                },
+                "order_number": {
+                  "type": "string",
+                  "description": "The digital Order number (`D01-…`) of the charge."
+                },
+                "order_details_link": {
+                  "type": "string",
+                  "description": "The Order details link. `None` when `order_number` is `None`."
+                },
+                "receipt_link": {
+                  "type": "string",
+                  "description": "The \"View Receipt\" link, the digital Order summary's print view. `None` when the card has none."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "A list of the PrimePayments, newest first."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
     "get_family_members": {
       "description": "Get the members of the Amazon Household whose Orders this account can view, such as linked Teen accounts, from the Order history's member filter.",
       "parameters": {},

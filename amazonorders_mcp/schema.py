@@ -81,3 +81,7 @@ class TransactionsPage(ToolOutput):
 
 class GiftCardActivityList(ToolOutput):
     tool = "get_gift_card_activity"
+
+
+class PrimePaymentList(ToolOutput):
+    tool = "get_prime_payments"

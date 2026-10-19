@@ -77,6 +77,7 @@ Just ask your assistant about your orders, and it will use the following tools:
 | `get_transactions`       | A batch of payment transactions over a number of days, or for an order     |
 | `get_gift_card_balance`  | The current Gift Card balance                                              |
 | `get_gift_card_activity` | Gift Card activity over a number of days                                   |
+| `get_prime_payments`     | Prime membership fee charges, each with its order number                   |
 | `get_family_members`     | Amazon Household members whose orders you can view, like Teen accounts     |
 | `get_config`             | The settings your assistant can change, and their values                   |
 | `update_config`          | Changes a setting, like the Amazon site (e.g. `amazon.co.uk`)              |

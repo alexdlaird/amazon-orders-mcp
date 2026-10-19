@@ -26,7 +26,7 @@ class TestServer(UnitTestCase):
         # THEN
         self.assertEqual({"check_session", "sign_in", "get_config", "update_config", "get_order_history", "get_order",
                           "get_family_members", "get_tracking", "get_invoice_pdfs", "get_transactions",
-                          "get_gift_card_activity", "get_gift_card_balance"},
+                          "get_gift_card_activity", "get_gift_card_balance", "get_prime_payments"},
                          {tool.name for tool in tools})
         for tool in tools:
             if tool.name in ("sign_in", "update_config"):
@@ -45,8 +45,7 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertEqual({"get_order_history", "get_family_members", "get_order", "get_tracking", "get_invoice_pdfs",
-                          "get_transactions",
-                          "get_gift_card_activity"}, set(SCHEMA["tools"]))
+                          "get_transactions", "get_gift_card_activity", "get_prime_payments"}, set(SCHEMA["tools"]))
         for name, tool_schema in SCHEMA["tools"].items():
             tool = tools[name]
             self.assertTrue(tool_schema["output_schema"]["properties"], f"{name} has an empty output schema")

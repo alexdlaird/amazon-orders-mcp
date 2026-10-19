@@ -16,6 +16,7 @@ from amazonorders.entity.invoice_pdf import InvoicePdf
 from amazonorders.entity.item import Item
 from amazonorders.entity.order import Order
 from amazonorders.entity.parsable import Parsable
+from amazonorders.entity.prime_payment import PrimePayment
 from amazonorders.entity.recipient import Recipient
 from amazonorders.entity.seller import Seller
 from amazonorders.entity.shipment import Shipment
@@ -24,6 +25,7 @@ from amazonorders.entity.transaction import Transaction
 from amazonorders.gift_cards import AmazonGiftCards
 from amazonorders.orders import AmazonOrders
 from amazonorders.paging import PagedResults
+from amazonorders.prime import AmazonPrime
 from amazonorders.transactions import AmazonTransactions
 from sphinx.pycode import ModuleAnalyzer
 
@@ -33,7 +35,7 @@ SCHEMA_COMMENT = ("AUTO-GENERATED — DO NOT EDIT. Generated from the installed 
                   "docs, via: scripts/generate-schema.py (make schema)")
 
 ENTITIES: List[Type[Parsable]] = [Order, Shipment, Item, Seller, Recipient, Tracking, Transaction, GiftCardActivity,
-                                  FamilyMember, InvoicePdf]
+                                  FamilyMember, InvoicePdf, PrimePayment]
 
 PRIMITIVE_SCHEMAS = {
     "bool": {"type": "boolean"},
@@ -82,6 +84,7 @@ TOOLS = [
     Tool("get_transactions", AmazonTransactions.get_transactions_page, ["days", "order_id", "limit", "cursor"],
          Transaction, "page"),
     Tool("get_gift_card_activity", AmazonGiftCards.get_gift_card_activity, ["days"], GiftCardActivity, "list"),
+    Tool("get_prime_payments", AmazonPrime.get_prime_payments, [], PrimePayment, "list"),
     Tool("get_family_members", AmazonOrders.get_family_members, [], FamilyMember, "list"),
 ]
 
