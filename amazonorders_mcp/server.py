@@ -7,6 +7,7 @@ from functools import partial
 from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, TypeVar, Union
 
 import anyio
+from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.gift_card_activity import GiftCardActivity
 from amazonorders.entity.order import Order
 from amazonorders.entity.tracking import Tracking
@@ -24,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from amazonorders_mcp import __version__
 from amazonorders_mcp.schema import (
+    FamilyMemberList,
     GiftCardActivityList,
     OrderDetails,
     OrderHistoryPage,
@@ -39,6 +41,8 @@ logger = logging.getLogger(__name__)
 #: What the server can do, given to the client when it connects.
 INSTRUCTIONS = (
     "Reads the user's Amazon order history, package tracking, transactions, and Gift Card balance and activity. "
+    "For the orders of an Amazon Household member, like a linked Teen account, get their `id` from "
+    "`get_family_members` and pass it to `get_order_history` as `family_member_id`. "
     "Every tool but `sign_in` and `update_config` is read-only. If a tool says the user isn't signed in, offer to "
     "sign them in with `sign_in`, and call it only once they agree. If that can't work, they can run "
     f"`{SIGN_IN_COMMAND}` in a terminal instead."
@@ -173,6 +177,8 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
             year: Annotated[Optional[int], parameter_field("get_order_history", "year")] = None,
             time_filter: Annotated[Optional[str], parameter_field("get_order_history", "time_filter")] = None,
             order_filter: Annotated[Optional[str], parameter_field("get_order_history", "order_filter")] = None,
+            family_member_id: Annotated[Optional[str],
+                                        parameter_field("get_order_history", "family_member_id")] = None,
             start_index: Annotated[Optional[int], parameter_field("get_order_history", "start_index")] = None,
             full_details: Annotated[bool, parameter_field("get_order_history", "full_details")] = False,
             limit: Annotated[Optional[int], parameter_field("get_order_history", "limit")] = DEFAULT_LIMIT,
@@ -186,6 +192,7 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
                                                                        full_details=full_details,
                                                                        time_filter=time_filter,
                                                                        order_filter=order_filter,
+                                                                       family_member_id=family_member_id,
                                                                        limit=limit,
                                                                        cursor=cursor,
                                                                        progress_with_total=progress)
@@ -242,6 +249,15 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         return TransactionsPage.model_validate(page.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
+                 description="Get the user's current Amazon Gift Card balance. For what was spent or added, and "
+                             "when, use `get_gift_card_activity`.")
+    async def get_gift_card_balance() -> GiftCardBalance:
+        def get(amazon_session: AmazonSession) -> float:
+            return AmazonGiftCards(amazon_session).get_balance()
+
+        return GiftCardBalance(balance=await run(get))
+
+    @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_gift_card_activity"))
     async def get_gift_card_activity(
             ctx: Context,
@@ -258,13 +274,14 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
             {"items": [activity.to_dict(exclude_none=True) for activity in activities]})
 
     @server.tool(annotations=READ_ONLY,
-                 description="Get the user's current Amazon Gift Card balance. For what was spent or added, and "
-                             "when, use `get_gift_card_activity`.")
-    async def get_gift_card_balance() -> GiftCardBalance:
-        def get(amazon_session: AmazonSession) -> float:
-            return AmazonGiftCards(amazon_session).get_balance()
+                 description=tool_description("get_family_members"))
+    async def get_family_members() -> FamilyMemberList:
+        def get(amazon_session: AmazonSession) -> List[FamilyMember]:
+            return AmazonOrders(amazon_session).get_family_members()
 
-        return GiftCardBalance(balance=await run(get))
+        members = await run(get)
+
+        return FamilyMemberList.model_validate({"items": [member.to_dict(exclude_none=True) for member in members]})
 
     @server.tool(annotations=READ_ONLY,
                  description="Get the settings that can be changed with `update_config`, and their values. "

@@ -7,6 +7,7 @@
         "year": "The year for which to get history. Ignored if `time_filter` or `cursor` is provided. Defaults to the current year if neither `year` nor `time_filter` is specified.",
         "time_filter": "The time filter to use. Supported values are `\"last30\"` (last 30 days), `\"months-3\"` (past 3 months), or `\"year-YYYY\"` (specific year). If provided, this takes precedence over the `year` parameter.",
         "order_filter": "The order type filter to use, e.g. `\"digital-orders\"` for Kindle and other digital purchases, which the default history doesn't include. If provided, appended alongside the time filter.",
+        "family_member_id": "The ID of an Amazon Household member whose Orders to get, such as a linked Teen account, from `get_family_members`.",
         "start_index": "The index of the Order from which to start fetching in the history. Ignored if `cursor` is provided.",
         "full_details": "Get the full details for each Order in the batch. This will execute an additional request per Order.",
         "limit": "Stop fetching history pages once at least this many Orders are collected. Whole pages are fetched, so the batch can hold up to a page more than `limit`. `None` fetches every page.",
@@ -710,6 +711,36 @@
               "additionalProperties": true
             },
             "description": "A list of the requested GiftCardActivity, newest first."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "get_family_members": {
+      "description": "Get the members of the Amazon Household whose Orders this account can view, such as linked Teen accounts, from the Order history's member filter.",
+      "parameters": {},
+      "output_schema": {
+        "type": "object",
+        "description": "The FamilyMembers, or an empty list if the account has none.",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A member of the Amazon Household whose Orders the account can view, such as a linked Teen account. Pass its `id` as `family_member_id` to `get_order_history` to get their Orders.",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The FamilyMember ID, Amazon's `familyMemberId`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The FamilyMember name."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "The FamilyMembers, or an empty list if the account has none."
           }
         },
         "additionalProperties": true

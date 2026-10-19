@@ -25,7 +25,8 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertEqual({"check_session", "sign_in", "get_config", "update_config", "get_order_history", "get_order",
-                          "get_tracking", "get_transactions", "get_gift_card_activity", "get_gift_card_balance"},
+                          "get_family_members", "get_tracking", "get_transactions", "get_gift_card_activity",
+                          "get_gift_card_balance"},
                          {tool.name for tool in tools})
         for tool in tools:
             if tool.name in ("sign_in", "update_config"):
@@ -43,7 +44,7 @@ class TestServer(UnitTestCase):
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
 
         # THEN
-        self.assertEqual({"get_order_history", "get_order", "get_tracking", "get_transactions",
+        self.assertEqual({"get_order_history", "get_family_members", "get_order", "get_tracking", "get_transactions",
                           "get_gift_card_activity"}, set(SCHEMA["tools"]))
         for name, tool_schema in SCHEMA["tools"].items():
             tool = tools[name]
@@ -135,7 +136,7 @@ class TestServer(UnitTestCase):
                           "has_more": True}, result.structured_content)
         mock_amazon_orders.return_value.get_order_history_page.assert_called_once_with(
             year=None, start_index=None, full_details=True, time_filter="last30", order_filter=None,
-            limit=DEFAULT_LIMIT, cursor=None, progress_with_total=ANY)
+            family_member_id=None, limit=DEFAULT_LIMIT, cursor=None, progress_with_total=ANY)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_order_history_from_cursor(self, mock_amazon_orders):
@@ -153,8 +154,8 @@ class TestServer(UnitTestCase):
         self.assertEqual({"items": [{"order_number": "112-0000000-0000011"}], "cursor": None, "has_more": False},
                          result.structured_content)
         mock_amazon_orders.return_value.get_order_history_page.assert_called_once_with(
-            year=None, start_index=None, full_details=False, time_filter=None, order_filter=None, limit=None,
-            cursor=cursor, progress_with_total=ANY)
+            year=None, start_index=None, full_details=False, time_filter=None, order_filter=None,
+            family_member_id=None, limit=None, cursor=cursor, progress_with_total=ANY)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_order_history_reports_progress(self, mock_amazon_orders):

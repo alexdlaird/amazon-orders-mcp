@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.3.0...HEAD)
+## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.3.1...HEAD)
+
+## [1.3.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.3.0...1.3.1) - 2026-10-19
+
+### Added
+
+- A `get_family_members` tool, and `family_member_id` on `get_order_history`, for the orders of Amazon Household members, like linked Teen accounts.
 
 ## [1.3.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.2.0...1.3.0) - 2026-10-18
 
