@@ -75,12 +75,12 @@ TOOLS = [
          parameter_calls={"time_filter": AmazonOrders.get_order_history,
                           "order_filter": AmazonOrders.get_order_history,
                           "family_member_id": AmazonOrders.get_order_history}),
-    Tool("get_family_members", AmazonOrders.get_family_members, [], FamilyMember, "list"),
     Tool("get_order", AmazonOrders.get_order, ["order_id"], Order, "entity"),
     Tool("get_tracking", AmazonOrders.get_tracking, ["order_id", "shipment_id"], Tracking, "entity"),
     Tool("get_transactions", AmazonTransactions.get_transactions_page, ["days", "order_id", "limit", "cursor"],
          Transaction, "page"),
     Tool("get_gift_card_activity", AmazonGiftCards.get_gift_card_activity, ["days"], GiftCardActivity, "list"),
+    Tool("get_family_members", AmazonOrders.get_family_members, [], FamilyMember, "list"),
 ]
 
 

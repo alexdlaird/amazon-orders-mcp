@@ -300,36 +300,6 @@
         "additionalProperties": true
       }
     },
-    "get_family_members": {
-      "description": "Get the members of the Amazon Household whose Orders this account can view, such as linked Teen accounts, from the Order history's member filter.",
-      "parameters": {},
-      "output_schema": {
-        "type": "object",
-        "description": "The FamilyMembers, or an empty list if the account has none.",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "description": "A member of the Amazon Household whose Orders the account can view, such as a linked Teen account. Pass its `id` as `family_member_id` to `get_order_history` to get their Orders.",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "description": "The FamilyMember ID, Amazon's `familyMemberId`."
-                },
-                "name": {
-                  "type": "string",
-                  "description": "The FamilyMember name."
-                }
-              },
-              "additionalProperties": true
-            },
-            "description": "The FamilyMembers, or an empty list if the account has none."
-          }
-        },
-        "additionalProperties": true
-      }
-    },
     "get_order": {
       "description": "Get the full details for a given Amazon Order ID.",
       "parameters": {
@@ -741,6 +711,36 @@
               "additionalProperties": true
             },
             "description": "A list of the requested GiftCardActivity, newest first."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "get_family_members": {
+      "description": "Get the members of the Amazon Household whose Orders this account can view, such as linked Teen accounts, from the Order history's member filter.",
+      "parameters": {},
+      "output_schema": {
+        "type": "object",
+        "description": "The FamilyMembers, or an empty list if the account has none.",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A member of the Amazon Household whose Orders the account can view, such as a linked Teen account. Pass its `id` as `family_member_id` to `get_order_history` to get their Orders.",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The FamilyMember ID, Amazon's `familyMemberId`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The FamilyMember name."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "The FamilyMembers, or an empty list if the account has none."
           }
         },
         "additionalProperties": true

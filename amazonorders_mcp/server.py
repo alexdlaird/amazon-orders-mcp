@@ -202,16 +202,6 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         return OrderHistoryPage.model_validate(page.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
-                 description=tool_description("get_family_members"))
-    async def get_family_members() -> FamilyMemberList:
-        def get(amazon_session: AmazonSession) -> List[FamilyMember]:
-            return AmazonOrders(amazon_session).get_family_members()
-
-        members = await run(get)
-
-        return FamilyMemberList.model_validate({"items": [member.to_dict(exclude_none=True) for member in members]})
-
-    @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_order"))
     async def get_order(
             order_id: Annotated[str, parameter_field("get_order", "order_id")]
@@ -259,6 +249,15 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         return TransactionsPage.model_validate(page.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
+                 description="Get the user's current Amazon Gift Card balance. For what was spent or added, and "
+                             "when, use `get_gift_card_activity`.")
+    async def get_gift_card_balance() -> GiftCardBalance:
+        def get(amazon_session: AmazonSession) -> float:
+            return AmazonGiftCards(amazon_session).get_balance()
+
+        return GiftCardBalance(balance=await run(get))
+
+    @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_gift_card_activity"))
     async def get_gift_card_activity(
             ctx: Context,
@@ -275,13 +274,14 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
             {"items": [activity.to_dict(exclude_none=True) for activity in activities]})
 
     @server.tool(annotations=READ_ONLY,
-                 description="Get the user's current Amazon Gift Card balance. For what was spent or added, and "
-                             "when, use `get_gift_card_activity`.")
-    async def get_gift_card_balance() -> GiftCardBalance:
-        def get(amazon_session: AmazonSession) -> float:
-            return AmazonGiftCards(amazon_session).get_balance()
+                 description=tool_description("get_family_members"))
+    async def get_family_members() -> FamilyMemberList:
+        def get(amazon_session: AmazonSession) -> List[FamilyMember]:
+            return AmazonOrders(amazon_session).get_family_members()
 
-        return GiftCardBalance(balance=await run(get))
+        members = await run(get)
+
+        return FamilyMemberList.model_validate({"items": [member.to_dict(exclude_none=True) for member in members]})
 
     @server.tool(annotations=READ_ONLY,
                  description="Get the settings that can be changed with `update_config`, and their values. "
