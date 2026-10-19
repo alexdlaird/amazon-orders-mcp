@@ -59,6 +59,10 @@ class OrderHistoryPage(ToolOutput):
     tool = "get_order_history"
 
 
+class FamilyMemberList(ToolOutput):
+    tool = "get_family_members"
+
+
 class OrderDetails(ToolOutput):
     tool = "get_order"
 

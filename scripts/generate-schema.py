@@ -10,6 +10,7 @@ import re
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type
 
 import docstring_parser
+from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.gift_card_activity import GiftCardActivity
 from amazonorders.entity.item import Item
 from amazonorders.entity.order import Order
@@ -30,7 +31,8 @@ SCHEMA_PATH = os.path.join(ROOT_DIR, "amazonorders_mcp", "schema.json")
 SCHEMA_COMMENT = ("AUTO-GENERATED — DO NOT EDIT. Generated from the installed amazon-orders' docstrings and field "
                   "docs, via: scripts/generate-schema.py (make schema)")
 
-ENTITIES: List[Type[Parsable]] = [Order, Shipment, Item, Seller, Recipient, Tracking, Transaction, GiftCardActivity]
+ENTITIES: List[Type[Parsable]] = [Order, Shipment, Item, Seller, Recipient, Tracking, Transaction, GiftCardActivity,
+                                  FamilyMember]
 
 PRIMITIVE_SCHEMAS = {
     "bool": {"type": "boolean"},
@@ -68,9 +70,12 @@ class Tool(NamedTuple):
 
 TOOLS = [
     Tool("get_order_history", AmazonOrders.get_order_history_page,
-         ["year", "time_filter", "order_filter", "start_index", "full_details", "limit", "cursor"], Order, "page",
+         ["year", "time_filter", "order_filter", "family_member_id", "start_index", "full_details", "limit", "cursor"],
+         Order, "page",
          parameter_calls={"time_filter": AmazonOrders.get_order_history,
-                          "order_filter": AmazonOrders.get_order_history}),
+                          "order_filter": AmazonOrders.get_order_history,
+                          "family_member_id": AmazonOrders.get_order_history}),
+    Tool("get_family_members", AmazonOrders.get_family_members, [], FamilyMember, "list"),
     Tool("get_order", AmazonOrders.get_order, ["order_id"], Order, "entity"),
     Tool("get_tracking", AmazonOrders.get_tracking, ["order_id", "shipment_id"], Tracking, "entity"),
     Tool("get_transactions", AmazonTransactions.get_transactions_page, ["days", "order_id", "limit", "cursor"],
