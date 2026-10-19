@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type
 import docstring_parser
 from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.gift_card_activity import GiftCardActivity
+from amazonorders.entity.invoice_pdf import InvoicePdf
 from amazonorders.entity.item import Item
 from amazonorders.entity.order import Order
 from amazonorders.entity.parsable import Parsable
@@ -32,7 +33,7 @@ SCHEMA_COMMENT = ("AUTO-GENERATED — DO NOT EDIT. Generated from the installed 
                   "docs, via: scripts/generate-schema.py (make schema)")
 
 ENTITIES: List[Type[Parsable]] = [Order, Shipment, Item, Seller, Recipient, Tracking, Transaction, GiftCardActivity,
-                                  FamilyMember]
+                                  FamilyMember, InvoicePdf]
 
 PRIMITIVE_SCHEMAS = {
     "bool": {"type": "boolean"},
@@ -77,6 +78,7 @@ TOOLS = [
                           "family_member_id": AmazonOrders.get_order_history}),
     Tool("get_order", AmazonOrders.get_order, ["order_id"], Order, "entity"),
     Tool("get_tracking", AmazonOrders.get_tracking, ["order_id", "shipment_id"], Tracking, "entity"),
+    Tool("get_invoice_pdfs", AmazonOrders.get_invoice_pdfs, ["order_id"], InvoicePdf, "list"),
     Tool("get_transactions", AmazonTransactions.get_transactions_page, ["days", "order_id", "limit", "cursor"],
          Transaction, "page"),
     Tool("get_gift_card_activity", AmazonGiftCards.get_gift_card_activity, ["days"], GiftCardActivity, "list"),

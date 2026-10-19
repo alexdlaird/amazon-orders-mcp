@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.3.1...HEAD)
 
+### Added
+
+- A `get_invoice_pdfs` tool, for an order's invoice and credit note PDFs, e.g. the VAT invoices on EU Amazon sites.
+
 ## [1.3.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.3.0...1.3.1) - 2026-10-19
 
 ### Added

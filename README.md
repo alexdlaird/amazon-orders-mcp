@@ -73,6 +73,7 @@ Just ask your assistant about your orders, and it will use the following tools:
 | `get_order_history`      | A batch of orders by year, time filter or order type, optionally detailed  |
 | `get_order`              | One order, by order number                                                 |
 | `get_tracking`           | A shipment's carrier and tracking number, from an order's shipment ID      |
+| `get_invoice_pdfs`       | An order's invoice and credit note PDFs, where the seller issues them      |
 | `get_transactions`       | A batch of payment transactions over a number of days, or for an order     |
 | `get_gift_card_balance`  | The current Gift Card balance                                              |
 | `get_gift_card_activity` | Gift Card activity over a number of days                                   |

@@ -67,6 +67,10 @@ class OrderDetails(ToolOutput):
     tool = "get_order"
 
 
+class InvoicePdfList(ToolOutput):
+    tool = "get_invoice_pdfs"
+
+
 class TrackingDetails(ToolOutput):
     tool = "get_tracking"
 
