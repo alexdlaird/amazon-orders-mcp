@@ -9,13 +9,16 @@ from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, Typ
 import anyio
 from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.gift_card_activity import GiftCardActivity
+from amazonorders.entity.invoice_pdf import InvoicePdf
 from amazonorders.entity.order import Order
+from amazonorders.entity.prime_payment import PrimePayment
 from amazonorders.entity.tracking import Tracking
 from amazonorders.entity.transaction import Transaction
 from amazonorders.exception import AmazonOrdersAuthError, AmazonOrdersBrowserNotInstalledError, AmazonOrdersError
 from amazonorders.gift_cards import AmazonGiftCards
 from amazonorders.orders import AmazonOrders
 from amazonorders.paging import PagedResults
+from amazonorders.prime import AmazonPrime
 from amazonorders.session import AmazonSession
 from amazonorders.transactions import AmazonTransactions
 from mcp.server.mcpserver import Context, MCPServer
@@ -27,8 +30,10 @@ from amazonorders_mcp import __version__
 from amazonorders_mcp.schema import (
     FamilyMemberList,
     GiftCardActivityList,
+    InvoicePdfList,
     OrderDetails,
     OrderHistoryPage,
+    PrimePaymentList,
     TrackingDetails,
     TransactionsPage,
     parameter_field,
@@ -40,7 +45,10 @@ logger = logging.getLogger(__name__)
 
 #: What the server can do, given to the client when it connects.
 INSTRUCTIONS = (
-    "Reads the user's Amazon order history, package tracking, transactions, and Gift Card balance and activity. "
+    "Reads the user's Amazon order history, invoice PDFs, package tracking, transactions, Gift Card balance and "
+    "activity, and Prime membership payments. The links from `get_invoice_pdfs` change on every call and may only "
+    "open in a browser signed in to the user's Amazon account, so give them to the user right away rather than "
+    "keeping them. "
     "For the orders of an Amazon Household member, like a linked Teen account, get their `id` from "
     "`get_family_members` and pass it to `get_order_history` as `family_member_id`. "
     "Every tool but `sign_in` and `update_config` is read-only. If a tool says the user isn't signed in, offer to "
@@ -227,6 +235,19 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         return TrackingDetails.model_validate(tracking.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
+                 description=tool_description("get_invoice_pdfs"))
+    async def get_invoice_pdfs(
+            order_id: Annotated[str, parameter_field("get_invoice_pdfs", "order_id")]
+    ) -> InvoicePdfList:
+        def get(amazon_session: AmazonSession) -> List[InvoicePdf]:
+            return AmazonOrders(amazon_session).get_invoice_pdfs(order_id)
+
+        invoice_pdfs = await run(get)
+
+        return InvoicePdfList.model_validate(
+            {"items": [invoice_pdf.to_dict(exclude_none=True) for invoice_pdf in invoice_pdfs]})
+
+    @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_transactions"))
     async def get_transactions(
             ctx: Context,
@@ -272,6 +293,16 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
 
         return GiftCardActivityList.model_validate(
             {"items": [activity.to_dict(exclude_none=True) for activity in activities]})
+
+    @server.tool(annotations=READ_ONLY,
+                 description=tool_description("get_prime_payments"))
+    async def get_prime_payments() -> PrimePaymentList:
+        def get(amazon_session: AmazonSession) -> List[PrimePayment]:
+            return AmazonPrime(amazon_session).get_prime_payments()
+
+        payments = await run(get)
+
+        return PrimePaymentList.model_validate({"items": [payment.to_dict(exclude_none=True) for payment in payments]})
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_family_members"))

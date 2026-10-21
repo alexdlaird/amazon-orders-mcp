@@ -12,9 +12,11 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type
 import docstring_parser
 from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.gift_card_activity import GiftCardActivity
+from amazonorders.entity.invoice_pdf import InvoicePdf
 from amazonorders.entity.item import Item
 from amazonorders.entity.order import Order
 from amazonorders.entity.parsable import Parsable
+from amazonorders.entity.prime_payment import PrimePayment
 from amazonorders.entity.recipient import Recipient
 from amazonorders.entity.seller import Seller
 from amazonorders.entity.shipment import Shipment
@@ -23,6 +25,7 @@ from amazonorders.entity.transaction import Transaction
 from amazonorders.gift_cards import AmazonGiftCards
 from amazonorders.orders import AmazonOrders
 from amazonorders.paging import PagedResults
+from amazonorders.prime import AmazonPrime
 from amazonorders.transactions import AmazonTransactions
 from sphinx.pycode import ModuleAnalyzer
 
@@ -32,7 +35,7 @@ SCHEMA_COMMENT = ("AUTO-GENERATED — DO NOT EDIT. Generated from the installed 
                   "docs, via: scripts/generate-schema.py (make schema)")
 
 ENTITIES: List[Type[Parsable]] = [Order, Shipment, Item, Seller, Recipient, Tracking, Transaction, GiftCardActivity,
-                                  FamilyMember]
+                                  FamilyMember, InvoicePdf, PrimePayment]
 
 PRIMITIVE_SCHEMAS = {
     "bool": {"type": "boolean"},
@@ -77,9 +80,11 @@ TOOLS = [
                           "family_member_id": AmazonOrders.get_order_history}),
     Tool("get_order", AmazonOrders.get_order, ["order_id"], Order, "entity"),
     Tool("get_tracking", AmazonOrders.get_tracking, ["order_id", "shipment_id"], Tracking, "entity"),
+    Tool("get_invoice_pdfs", AmazonOrders.get_invoice_pdfs, ["order_id"], InvoicePdf, "list"),
     Tool("get_transactions", AmazonTransactions.get_transactions_page, ["days", "order_id", "limit", "cursor"],
          Transaction, "page"),
     Tool("get_gift_card_activity", AmazonGiftCards.get_gift_card_activity, ["days"], GiftCardActivity, "list"),
+    Tool("get_prime_payments", AmazonPrime.get_prime_payments, [], PrimePayment, "list"),
     Tool("get_family_members", AmazonOrders.get_family_members, [], FamilyMember, "list"),
 ]
 

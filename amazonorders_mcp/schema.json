@@ -592,6 +592,46 @@
         "additionalProperties": true
       }
     },
+    "get_invoice_pdfs": {
+      "description": "Get the invoice PDFs (invoices and credit notes) of a given Amazon Order ID from its invoice list.",
+      "parameters": {
+        "order_id": "The Amazon Order ID to lookup."
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "The Order's InvoicePdfs, empty if Amazon lists none.",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "An invoice PDF of an Amazon `Order`, such as an invoice or a credit note, parsed from the Order's invoice list. See `get_invoice_pdfs`, and `download_invoice_pdf` for the document itself.",
+              "properties": {
+                "order_number": {
+                  "type": "string",
+                  "description": "The Order number the document belongs to."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The document's name, as Amazon lists it, e.g. `Invoice`, `Invoice 2`, or `Credit note`."
+                },
+                "link": {
+                  "type": "string",
+                  "description": "The link to download the document. Amazon generates a new one on each request, so don't store it, get the Order's invoices again instead."
+                },
+                "is_credit_note": {
+                  "type": "boolean",
+                  "description": "`True` if the document is a credit note (a refund) rather than an invoice."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "The Order's InvoicePdfs, empty if Amazon lists none."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
     "get_transactions": {
       "description": "Get a batch of Amazon Transaction history for a given number of days, or for a single Order, with a cursor to fetch the next batch.",
       "parameters": {
@@ -711,6 +751,49 @@
               "additionalProperties": true
             },
             "description": "A list of the requested GiftCardActivity, newest first."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "get_prime_payments": {
+      "description": "Get every charge in the Prime membership payment history.",
+      "parameters": {},
+      "output_schema": {
+        "type": "object",
+        "description": "A list of the PrimePayments, newest first.",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A charge in the Prime membership payment history: the membership fee Amazon billed on a sign-up or renewal date. Each charge is a digital Order (a `D01-` ID) that neither the Order history nor the Digital Orders tab lists, so this entity is the index to it. The Order itself is fetched by `order_number` with `get_order`, which renders the standard Order details layout for these IDs.",
+              "properties": {
+                "payment_date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "The date the membership fee was charged, not the start of the membership period it covers."
+                },
+                "grand_total": {
+                  "type": "number",
+                  "description": "The amount charged, tax included."
+                },
+                "order_number": {
+                  "type": "string",
+                  "description": "The digital Order number (`D01-…`) of the charge."
+                },
+                "order_details_link": {
+                  "type": "string",
+                  "description": "The Order details link. `None` when `order_number` is `None`."
+                },
+                "receipt_link": {
+                  "type": "string",
+                  "description": "The \"View Receipt\" link, the digital Order summary's print view. `None` when the card has none."
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "A list of the PrimePayments, newest first."
           }
         },
         "additionalProperties": true

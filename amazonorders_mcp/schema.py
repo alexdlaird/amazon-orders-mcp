@@ -67,6 +67,10 @@ class OrderDetails(ToolOutput):
     tool = "get_order"
 
 
+class InvoicePdfList(ToolOutput):
+    tool = "get_invoice_pdfs"
+
+
 class TrackingDetails(ToolOutput):
     tool = "get_tracking"
 
@@ -77,3 +81,7 @@ class TransactionsPage(ToolOutput):
 
 class GiftCardActivityList(ToolOutput):
     tool = "get_gift_card_activity"
+
+
+class PrimePaymentList(ToolOutput):
+    tool = "get_prime_payments"
