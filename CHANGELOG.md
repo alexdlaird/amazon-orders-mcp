@@ -4,21 +4,29 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.4.1...HEAD)
+## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.4.2...HEAD)
+
+## [1.4.2](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.4.1...1.4.2) - 2026-10-21
+
+### Fixed
+
+- Bug fixes and stability improvements.
 
 ## [1.4.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.4.0...1.4.1) - 2026-10-21
 
 ### Added
 
-- `--transport streamable-http`, to serve remote MCP clients over HTTP, with `--host`, `--port`, `--json-response`, a bearer token (required off loopback), and a `/health` endpoint.
-- `site` on every tool that reads Amazon, e.g. `amazon.de`, to read several Amazon sites from one server, each with its own saved session (in `amazon-orders`' own cookie jar for the site).
-- `check_session` checks every site with a saved session, says which is the default, and reports a site it couldn't check without failing the others.
-- A `login` target in the `Dockerfile`, an image with Chromium for `amazon-orders login` to clear Amazon's JavaScript challenges in a container, and a guide to running the server in one. The server's image stays without a browser.
+- `--transport streamable-http`, to serve remote MCP clients over HTTP (a bearer token is required off loopback).
+- `site` on every tool (e.g. `amazon.de`), to read several Amazon sites from one server.
+- A `login` target in the `Dockerfile`, to sign in from a container.
 
 ### Changed
 
-- `sign_in` says how to sign in with `amazon-orders login` where there's no display to open a browser window on, like in a container.
-- The Docker image runs as a non-root user, with its config and saved session in `/home/app/.config/amazonorders`.
+- The Docker image runs as a non-root user, with its config in `/home/app/.config/amazonorders`.
+
+### Fixed
+
+- Bug fixes and stability improvements.
 
 ## [1.4.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.3.1...1.4.0) - 2026-10-21
 
