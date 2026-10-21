@@ -241,6 +241,25 @@ class TestServer(UnitTestCase):
         mock_browser_login.return_value.login.assert_called_once_with(SIGN_IN_TIMEOUT)
 
     @patch("amazonorders_mcp.server.has_display", return_value=False)
+    async def test_sign_in_on_unknown_site_without_display(self, mock_has_display):
+        # WHEN
+        result = await self.call_tool("sign_in", {"site": "ebay.com"})
+
+        # THEN the site is checked first
+        self.assert_tool_error(result, "\"ebay.com\" isn't an Amazon site that can be read.")
+
+    @patch("amazonorders_mcp.server.has_display", return_value=False)
+    @patch("amazonorders_mcp.session.PlaywrightBrowserLogin")
+    async def test_sign_in_on_site_without_display_names_the_site(self, mock_browser_login, mock_has_display):
+        # WHEN
+        result = await self.call_tool("sign_in", {"site": "amazon.de"})
+
+        # THEN
+        self.assert_tool_error(result, "There's no display where the server runs",
+                               "`amazon-orders --domain amazon.de login`")
+        mock_browser_login.assert_not_called()
+
+    @patch("amazonorders_mcp.server.has_display", return_value=False)
     @patch("amazonorders_mcp.session.PlaywrightBrowserLogin")
     async def test_sign_in_without_display_says_how_to_sign_in(self, mock_browser_login, mock_has_display):
         # WHEN
