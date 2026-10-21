@@ -134,15 +134,17 @@ docker run -i --rm -v amazon-orders:/home/app/.config/amazonorders amazon-orders
 ```
 
 There's no display in a container, so `sign_in` can't open a browser window there. Instead, sign in with
-`amazon-orders login`, in a one-off container on the same volume:
+`amazon-orders login`, in a one-off container on the same volume. It runs from the `login` image, which adds the
+Chromium that `amazon-orders` uses to clear Amazon's JavaScript challenges while signing in (the server's image has no
+browser, since the server only uses the saved session):
 
 ```sh
-docker run -it --rm -v amazon-orders:/home/app/.config/amazonorders --entrypoint amazon-orders amazon-orders-mcp login
+docker build --target login -t amazon-orders-login .
+docker run -it --rm -v amazon-orders:/home/app/.config/amazonorders amazon-orders-login
 ```
 
-It asks for your username and password, and a one-time passcode if your account has two-step verification. The image
-includes the Chromium that `amazon-orders` uses to clear Amazon's JavaScript challenges while signing in. `login` signs
-out of a saved session first, and the server uses the new session on its next call, without a restart.
+It asks for your username and password, and a one-time passcode if your account has two-step verification. `login`
+signs out of a saved session first, and the server uses the new session on its next call, without a restart.
 
 To sign in without being asked, e.g. from a script that signs in again when the session expires, give your credentials
 to that one-off container with

@@ -1,0 +1,3 @@
+# The Playwright whose Chromium the login image (docker build --target login) installs, for amazon-orders to clear
+# Amazon's JavaScript challenges when signing in. Pinned here so Dependabot keeps it current.
+playwright==1.64.0

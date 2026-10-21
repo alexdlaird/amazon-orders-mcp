@@ -9,7 +9,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 
 - `--transport streamable-http`, to serve remote MCP clients over HTTP, with `--host`, `--port`, `--json-response`, a bearer token (required off loopback), and a `/health` endpoint.
-- Chromium in the Docker image, so `amazon-orders login` can clear Amazon's JavaScript challenges in a container, and a guide to running the server in one.
+- A `login` target in the `Dockerfile`, an image with Chromium for `amazon-orders login` to clear Amazon's JavaScript challenges in a container, and a guide to running the server in one. The server's image stays without a browser.
 
 ### Changed
 
