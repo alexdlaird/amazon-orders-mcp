@@ -2,11 +2,14 @@ __copyright__ = "Copyright (c) 2026 Alex Laird"
 __license__ = "MIT"
 
 import io
+import os
+import sys
 from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import patch
 
 from amazonorders.exception import AmazonOrdersAuthError
 
-from amazonorders_mcp.session import StderrIO
+from amazonorders_mcp.session import StderrIO, has_display
 from tests.unittestcase import UnitTestCase
 
 
@@ -40,3 +43,41 @@ class TestSession(UnitTestCase):
 
         # THEN
         self.assertIn("Enter OTP", str(cm.exception))
+
+    @patch.object(sys, "platform", "linux")
+    def test_linux_without_display(self):
+        # GIVEN
+        with patch.dict(os.environ):
+            os.environ.pop("DISPLAY", None)
+            os.environ.pop("WAYLAND_DISPLAY", None)
+
+            # WHEN
+            display = has_display()
+
+        # THEN
+        self.assertFalse(display)
+
+    @patch.object(sys, "platform", "linux")
+    def test_linux_with_display(self):
+        # GIVEN
+        with patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0"}):
+            os.environ.pop("DISPLAY", None)
+
+            # WHEN
+            display = has_display()
+
+        # THEN
+        self.assertTrue(display)
+
+    @patch.object(sys, "platform", "darwin")
+    def test_display_assumed_off_linux(self):
+        # GIVEN
+        with patch.dict(os.environ):
+            os.environ.pop("DISPLAY", None)
+            os.environ.pop("WAYLAND_DISPLAY", None)
+
+            # WHEN
+            display = has_display()
+
+        # THEN
+        self.assertTrue(display)

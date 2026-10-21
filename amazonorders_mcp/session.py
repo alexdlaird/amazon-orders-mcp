@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 #: The command that signs in from a terminal, for a client that can't use the ``sign_in`` tool.
 SIGN_IN_COMMAND = "amazon-orders login --browser"
 
+#: The command that signs in without a browser window, with the user's credentials, where there's no display.
+HEADLESS_SIGN_IN_COMMAND = "amazon-orders login"
+
 #: What a sign-in reports while it waits for the user.
 WAITING_TO_SIGN_IN_STATUS = "Waiting for the user to sign in to Amazon ..."
 
@@ -252,6 +255,17 @@ class SavedSession:
         amazon_session.auth_forms = []
 
         return amazon_session
+
+
+def has_display() -> bool:
+    """
+    Check whether a browser window can be opened for the user to sign in, as ``amazon-orders`` checks before it opens
+    one: on Linux, only with a display, which a server or a container usually doesn't have.
+
+    :return: Whether there's a display.
+    """
+    return (not sys.platform.startswith("linux") or
+            bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")))
 
 
 def _cookie_jar_mtime(config: AmazonOrdersConfig) -> Optional[float]:
