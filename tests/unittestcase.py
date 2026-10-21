@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import responses
 from amazonorders import conf
 from amazonorders.conf import AmazonOrdersConfig
+from amazonorders.constants import Constants
 from amazonorders.session import AmazonSession
 from mcp.client import Client
 from mcp.shared.dispatcher import ProgressFnT
@@ -30,6 +31,10 @@ class UnitTestCase(unittest.IsolatedAsyncioTestCase):
                                     if name.startswith(conf.ENVIRONMENT_VARIABLE_PREFIX)}
 
         self.config_dir = tempfile.mkdtemp()
+        # amazon-orders' default config directory, where it keeps each site's cookie jar
+        config_dir_patcher = patch.object(conf, "DEFAULT_CONFIG_DIR", self.config_dir)
+        config_dir_patcher.start()
+        self.addCleanup(config_dir_patcher.stop)
         self.test_cookie_jar_path = os.path.join(self.config_dir, "cookies.json")
         self.test_config = AmazonOrdersConfig(config_path=os.path.join(self.config_dir, "config.yml"), data={
             "output_dir": os.path.join(self.config_dir, "output"),
@@ -47,10 +52,10 @@ class UnitTestCase(unittest.IsolatedAsyncioTestCase):
         shutil.rmtree(self.config_dir, ignore_errors=True)
         os.environ.update(self.cleared_environment)
 
-    def given_saved_session(self) -> MagicMock:
-        with open(self.test_cookie_jar_path, "w", encoding="utf-8") as f:
-            f.write(json.dumps({cookie: "some-value"
-                                for cookie in self.test_config.constants.COOKIES_SET_WHEN_AUTHENTICATED}))
+    def given_saved_session(self,
+                            *sites: str) -> MagicMock:
+        for site in sites or (self.saved_session.site(),):
+            self.given_cookie_jar(site)
 
         def login(amazon_session: AmazonSession) -> None:
             amazon_session.is_authenticated = True
@@ -58,6 +63,15 @@ class UnitTestCase(unittest.IsolatedAsyncioTestCase):
         login_patcher = patch.object(AmazonSession, "login", autospec=True, side_effect=login)
         self.addCleanup(login_patcher.stop)
         return login_patcher.start()
+
+    def given_cookie_jar(self,
+                         site: str) -> str:
+        cookie_jar_path = AmazonOrdersConfig(config_path=self.test_config.config_path,
+                                             data={"domain": site}).cookie_jar_path
+        os.makedirs(os.path.dirname(cookie_jar_path), exist_ok=True)
+        with open(cookie_jar_path, "w", encoding="utf-8") as f:
+            f.write(json.dumps({Constants.region_auth_cookie(site.removeprefix("amazon.")): "some-value"}))
+        return cookie_jar_path
 
     def given_entities(self, *dicts: Dict[str, Any]) -> List[MagicMock]:
         return [MagicMock(**{"to_dict.return_value": entity_dict}) for entity_dict in dicts]

@@ -1,12 +1,14 @@
 __copyright__ = "Copyright (c) 2026 Alex Laird"
 __license__ = "MIT"
 
+import copy
 import logging
 import os
 import subprocess
 import sys
 import threading
-from typing import Any, Callable, Dict, Optional, Tuple, TypeVar, Union
+from contextlib import ExitStack
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 from urllib.parse import urlparse
 
 from amazonorders.conf import AmazonOrdersConfig
@@ -59,13 +61,19 @@ class StderrIO(IODefault):
 
 class SavedSession:
     """
-    The Amazon session ``amazon-orders`` saved when the user signed in, shared by every tool call. A tool call only
-    ever reuses it: no sign-in form is ever submitted, so credentials are never used and no browser is opened. If
+    The Amazon sessions ``amazon-orders`` saved when the user signed in, shared by every tool call. A tool call only
+    ever reuses one: no sign-in form is ever submitted, so credentials are never used and no browser is opened. If
     there's no saved session, or it has expired, an :class:`~amazonorders.exception.AmazonOrdersAuthError` is raised,
     and the user signs in again with :meth:`sign_in`, or with :data:`SIGN_IN_COMMAND` in a terminal.
 
-    Calls are serialized, since an :class:`~amazonorders.session.AmazonSession` isn't made for concurrent use. After
-    Amazon rejects the session, it's loaded again from disk, so a sign-in saved meanwhile (e.g. by the CLI's ``login``)
+    Each Amazon site, like amazon.com or amazon.de, has its own orders and its own sign-in, so each has its own
+    session, made when it's first used. The default site is the config's ``domain``, and another site's session has
+    the same config, but for that site. ``amazon-orders`` keeps each site's session in its own cookie jar (e.g.
+    ``cookies.amazon.de.json``), so ``amazon-orders --domain amazon.de login`` signs in to a site from a terminal.
+
+    Calls to a site are serialized, since an :class:`~amazonorders.session.AmazonSession` isn't made for concurrent
+    use, but calls to different sites can run at the same time, since their sessions share nothing. After Amazon
+    rejects a site's session, it's loaded again from disk, so a sign-in saved meanwhile (e.g. by the CLI's ``login``)
     is used, and the rejected call is retried once with it.
 
     :param config: The config to use, by default the same one the ``amazon-orders`` CLI uses.
@@ -74,84 +82,62 @@ class SavedSession:
     def __init__(self,
                  config: Optional[AmazonOrdersConfig] = None) -> None:
         self.config: Optional[AmazonOrdersConfig] = config
-        self._amazon_session: Optional[AmazonSession] = None
-        self._loaded_cookie_jar_mtime: Optional[float] = None
+        self._site_sessions: Dict[str, _SiteSession] = {}
         self._lock = threading.Lock()
-        #: What an ongoing :meth:`sign_in` is doing, for the client to show while it waits.
-        self.sign_in_status: str = WAITING_TO_SIGN_IN_STATUS
 
     def run(self,
-            call: Callable[[AmazonSession], T]) -> T:
+            call: Callable[[AmazonSession], T],
+            site: Optional[str] = None) -> T:
         """
-        Run a call with the signed-in session.
+        Run a call with a site's signed-in session.
 
         :param call: The call to make with the signed-in session.
+        :param site: The Amazon site (e.g. ``amazon.de``), by default the config's ``domain``.
         :return: The call's result.
-        :raises AmazonOrdersAuthError: If there's no saved session, or it has expired.
+        :raises AmazonOrdersAuthError: If there's no saved session for the site, or it has expired.
+        :raises AmazonOrdersError: If the site isn't an Amazon site that can be read.
         """
-        with self._lock:
-            try:
-                return self._run_signed_in(call)
-            except AmazonOrdersAuthError:
-                if not self._saved_session_changed():
-                    raise
-
-                logger.debug("The saved session changed since it was loaded, so the call is retried with it")
-
-                return self._run_signed_in(call)
-
-    def _run_signed_in(self,
-                       call: Callable[[AmazonSession], T]) -> T:
-        try:
-            return call(self._signed_in())
-        except AmazonOrdersAuthError:
-            logger.debug("Amazon rejected the saved session, so it will be loaded again from disk on the next call")
-
-            if self._amazon_session is not None:
-                self._loaded_cookie_jar_mtime = self._amazon_session.cookie_jar_mtime
-            self._amazon_session = None
-
-            raise
-
-    def _saved_session_changed(self) -> bool:
-        return self.config is not None and _cookie_jar_mtime(self.config) != self._loaded_cookie_jar_mtime
+        site_session = self._site_session(site)
+        with site_session.lock:
+            return site_session.run(call)
 
     def sign_in(self,
                 timeout: int = SIGN_IN_TIMEOUT,
-                browser: Optional[str] = None) -> None:
+                browser: Optional[str] = None,
+                site: Optional[str] = None) -> None:
         """
         Open a browser window for the user to sign in on Amazon's own page, then save the session. Credentials are
-        never seen, and other calls wait until the sign-in is done.
+        never seen, and other calls to the site wait until the sign-in is done.
 
         :param timeout: The number of seconds the user has to sign in.
         :param browser: The browser to sign in with, which is saved to the config so it's only chosen once. A
             Playwright browser type that isn't installed yet is downloaded first. By default, an installed Chrome,
             then Edge, or a Chromium that's been downloaded.
+        :param site: The Amazon site to sign in to (e.g. ``amazon.de``), by default the config's ``domain``.
         :raises AmazonOrdersBrowserNotInstalledError: If no browser is installed to sign in with.
         :raises AmazonOrdersError: If a browser can't be downloaded, or the sign-in isn't completed in time, or Amazon
             doesn't accept it.
         """
-        with self._lock:
-            self.sign_in_status = WAITING_TO_SIGN_IN_STATUS
-            amazon_session = self._session()
-            if browser and browser != amazon_session.config.browser:
-                self._save_config("browser", browser)
-                amazon_session.config.update_config("browser", browser, save=False)
+        site_session = self._site_session(site)
+        site_session.sign_in_status = WAITING_TO_SIGN_IN_STATUS
+        if browser and browser != self.get_config()["preferences"]["browser"]:
+            self.update_config("browser", browser)
 
-            browser_login = PlaywrightBrowserLogin(amazon_session)
-            try:
-                browser_login.login(timeout)
-            except AmazonOrdersBrowserNotInstalledError as e:
-                if not browser or (e.meta or {}).get("browser_types") != [browser]:
-                    raise
+        with site_session.lock:
+            site_session.sign_in(timeout, browser)
 
-                self.sign_in_status = f"Downloading {browser} to sign in with ..."
-                _download_browser(browser)
+    def sign_in_status(self,
+                       site: str) -> str:
+        """
+        Get what an ongoing :meth:`sign_in` is doing, for the client to show while it waits. It never waits for a
+        lock, so it can be called from the server's event loop.
 
-                self.sign_in_status = WAITING_TO_SIGN_IN_STATUS
-                browser_login.login(timeout)
-            finally:
-                self._loaded_cookie_jar_mtime = amazon_session.cookie_jar_mtime
+        :param site: The Amazon site being signed in to, named as :meth:`site` names it.
+        :return: The sign-in's status.
+        """
+        site_session = self._site_sessions.get(site)
+
+        return site_session.sign_in_status if site_session else WAITING_TO_SIGN_IN_STATUS
 
     def get_config(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -160,7 +146,7 @@ class SavedSession:
         :return: The values, by key, under ``preferences`` and ``tuning``.
         """
         with self._lock:
-            config = self._session().config
+            config = self._config()
 
             return {"preferences": {key: getattr(config, key) for key in PREFERENCE_KEYS},
                     "tuning": {key: getattr(config, key) for key in TUNING_KEYS}}
@@ -170,9 +156,10 @@ class SavedSession:
                       value: Union[str, int, float, bool, None],
                       save: Optional[bool] = None) -> Tuple[Any, bool]:
         """
-        Change a config key in :data:`PREFERENCE_KEYS` or :data:`TUNING_KEYS`. A saved change is made with the
-        ``amazon-orders`` CLI's ``update-config`` command, so the CLI follows it. A ``domain`` must be an Amazon site
-        ``amazon-orders`` knows, since the saved session's cookies are sent to it.
+        Change a config key in :data:`PREFERENCE_KEYS` or :data:`TUNING_KEYS`, for every site's session. A saved
+        change is made with the ``amazon-orders`` CLI's ``update-config`` command, so the CLI follows it. A ``domain``
+        is the default site, which must be an Amazon site ``amazon-orders`` knows. Each site keeps its own saved
+        session, so changing it signs nothing out.
 
         :param key: The config key.
         :param value: The new value, read as the CLI reads it.
@@ -189,27 +176,127 @@ class SavedSession:
         if key == "domain":
             text = _to_amazon_domain(text)
 
-        with self._lock:
-            config = self._session().config
-            if key == "domain":
-                config.set_domain(text)
-            else:
-                config.update_config(key, to_type(text), save=False)
-            saved = key in PREFERENCE_KEYS if save is None else save
-            if saved:
-                self._save_config(key, text)
-            self._amazon_session = None
+        saved = key in PREFERENCE_KEYS if save is None else save
+        with self._lock, ExitStack() as site_locks:
+            for site_session in self._site_sessions.values():
+                site_locks.enter_context(site_session.lock)
 
-            return getattr(config, key), saved
+            try:
+                self._change_config(key, text, saved)
+            finally:
+                # Every site's config is the config or a copy of it, so each is made again with the change
+                for site_session in self._site_sessions.values():
+                    site_session.reset()
 
-    def base_url(self) -> str:
+            return getattr(self._config(), key), saved
+
+    def _change_config(self,
+                       key: str,
+                       text: str,
+                       save: bool) -> None:
+        config = self._config()
+        if key == "domain":
+            config.set_domain(text)
+        else:
+            config.update_config(key, to_type(text), save=False)
+        if save:
+            self._save_config(key, text)
+
+    def site(self,
+             site: Optional[str] = None) -> str:
         """
-        Get the Amazon site the session is for.
+        Get an Amazon site's name, the way sites are named here.
 
+        :param site: The Amazon site (e.g. ``amazon.de``, or ``https://www.amazon.de``), by default (or if empty)
+            the config's ``domain``.
+        :return: The site's name (e.g. ``amazon.de``).
+        :raises AmazonOrdersError: If the site isn't an Amazon site that can be read.
+        """
+        with self._lock:
+            default_site = self._config().site
+
+        return default_site if not site or site == default_site else _to_amazon_domain(site)
+
+    def sites(self) -> List[str]:
+        """
+        Get the default site, then every other Amazon site that has a saved session (a cookie jar), signed in or not.
+
+        :return: The sites' names.
+        """
+        with self._lock:
+            config = self._config()
+            default_site = config.site
+            sites = [default_site]
+            if config.environment_value("domain"):
+                return sites
+
+            # One copy, moved from site to site, finds each site's cookie jar as amazon-orders names it
+            site_config = copy.deepcopy(config)
+            for site in sorted(f"amazon.{suffix}" for suffix in REGION_SITES):
+                if site == default_site:
+                    continue
+                site_config.set_domain(site)
+                if os.path.exists(site_config.cookie_jar_path):
+                    sites.append(site)
+
+            return sites
+
+    def base_url(self,
+                 site: Optional[str] = None) -> str:
+        """
+        Get the Amazon site a session is for.
+
+        :param site: The Amazon site, by default the config's ``domain``.
         :return: The Amazon site's base URL.
         """
+        site_session = self._site_session(site)
+        with site_session.lock:
+            return site_session.config.constants.BASE_URL
+
+    def _config(self) -> AmazonOrdersConfig:
+        if self.config is None:
+            self.config = AmazonOrdersConfig()
+
+        return self.config
+
+    def _site_session(self,
+                      site: Optional[str]) -> "_SiteSession":
+        name = self.site(site)
         with self._lock:
-            return self._session().config.constants.BASE_URL
+            self._config()
+            if name not in self._site_sessions:
+                self._site_sessions[name] = _SiteSession(lambda: self._site_config(name))
+
+            return self._site_sessions[name]
+
+    def _site_config(self,
+                     site: str) -> AmazonOrdersConfig:
+        """
+        Build a site's config: the config itself for the default site, or else a copy of it for the other site. Only
+        called while the site's lock is held, so the config isn't being changed.
+
+        :raises AmazonOrdersError: If ``AMAZON_DOMAIN`` sets the site, since an environment variable outranks every
+            other config source, so every call reads that site. Or if the site would share the default site's cookie
+            jar, as every site does with an explicit ``cookie_jar_path``, since signing in to one would then sign out
+            of the other.
+        """
+        config = self._config()
+        if site == config.site:
+            return config
+
+        if config.environment_value("domain"):
+            raise AmazonOrdersError(f"{site} can't be read, since the AMAZON_DOMAIN environment variable sets the "
+                                    f"site every call reads to {config.site}. To read several sites, unset it and set "
+                                    "the default site with the domain setting instead.")
+
+        site_config = copy.deepcopy(config)
+        site_config.set_domain(site)
+        if site_config.cookie_jar_path == config.cookie_jar_path:
+            raise AmazonOrdersError(f"{site} can't be read alongside {config.site}, since the cookie_jar_path setting "
+                                    f"({config.cookie_jar_path}) keeps every site's session in one cookie jar. Leave "
+                                    "it unset for each site to have its own.")
+
+        return site_config
 
     def _save_config(self,
                      key: str,
@@ -225,6 +312,91 @@ class SavedSession:
 
             raise AmazonOrdersError(f"Could not change the {key} setting.")
 
+
+class _SiteSession:
+    """
+    One Amazon site's saved session. Its lock is held for each of its calls, and while its config changes.
+
+    :param new_config: Builds the site's config.
+    """
+
+    def __init__(self,
+                 new_config: Callable[[], AmazonOrdersConfig]) -> None:
+        self.lock = threading.Lock()
+        #: What an ongoing :meth:`sign_in` is doing, for the client to show while it waits.
+        self.sign_in_status: str = WAITING_TO_SIGN_IN_STATUS
+        self._new_config = new_config
+        self._config: Optional[AmazonOrdersConfig] = None
+        self._amazon_session: Optional[AmazonSession] = None
+        self._loaded_cookie_jar_mtime: Optional[float] = None
+
+    @property
+    def config(self) -> AmazonOrdersConfig:
+        """
+        The site's config, made when it's first needed.
+        """
+        if self._config is None:
+            self._config = self._new_config()
+
+        return self._config
+
+    def reset(self) -> None:
+        """
+        Forget the site's config and session, after the config changed, so they're made again on the next call.
+        """
+        self._config = None
+        self._amazon_session = None
+        self._loaded_cookie_jar_mtime = None
+
+    def run(self,
+            call: Callable[[AmazonSession], T]) -> T:
+        try:
+            return self._run_signed_in(call)
+        except AmazonOrdersAuthError:
+            if not self._saved_session_changed():
+                raise
+
+            logger.debug("The saved session changed since it was loaded, so the call is retried with it")
+
+            return self._run_signed_in(call)
+
+    def sign_in(self,
+                timeout: int,
+                browser: Optional[str]) -> None:
+        self.sign_in_status = WAITING_TO_SIGN_IN_STATUS
+        amazon_session = self._session()
+
+        browser_login = PlaywrightBrowserLogin(amazon_session)
+        try:
+            browser_login.login(timeout)
+        except AmazonOrdersBrowserNotInstalledError as e:
+            if not browser or (e.meta or {}).get("browser_types") != [browser]:
+                raise
+
+            self.sign_in_status = f"Downloading {browser} to sign in with ..."
+            _download_browser(browser)
+
+            self.sign_in_status = WAITING_TO_SIGN_IN_STATUS
+            browser_login.login(timeout)
+        finally:
+            self._loaded_cookie_jar_mtime = amazon_session.cookie_jar_mtime
+
+    def _run_signed_in(self,
+                       call: Callable[[AmazonSession], T]) -> T:
+        try:
+            return call(self._signed_in())
+        except AmazonOrdersAuthError:
+            logger.debug("Amazon rejected the saved session, so it will be loaded again from disk on the next call")
+
+            if self._amazon_session is not None:
+                self._loaded_cookie_jar_mtime = self._amazon_session.cookie_jar_mtime
+            self._amazon_session = None
+
+            raise
+
+    def _saved_session_changed(self) -> bool:
+        return _cookie_jar_mtime(self.config) != self._loaded_cookie_jar_mtime
+
     def _signed_in(self) -> AmazonSession:
         amazon_session = self._session()
         if not amazon_session.is_authenticated:
@@ -239,8 +411,6 @@ class SavedSession:
 
     def _session(self) -> AmazonSession:
         if self._amazon_session is None:
-            if self.config is None:
-                self.config = AmazonOrdersConfig()
             amazon_session = AmazonSession(io=StderrIO(), config=self.config)
             self._loaded_cookie_jar_mtime = amazon_session.cookie_jar_mtime
             self._amazon_session = self._reuse_only(amazon_session)

@@ -1,6 +1,7 @@
 __copyright__ = "Copyright (c) 2026 Alex Laird"
 __license__ = "MIT"
 
+import os
 from unittest.mock import ANY, patch
 
 import responses
@@ -12,6 +13,9 @@ from amazonorders_mcp.schema import SCHEMA
 from amazonorders_mcp.server import DEFAULT_LIMIT, create_server
 from amazonorders_mcp.session import SIGN_IN_COMMAND
 from tests.unittestcase import UnitTestCase
+
+#: What ``check_session`` says to do when the user isn't signed in to the default site.
+SIGN_IN_ADVICE = f"Offer to sign the user in with `sign_in`, or they can run `{SIGN_IN_COMMAND}` in a terminal."
 
 
 class TestServer(UnitTestCase):
@@ -34,6 +38,20 @@ class TestServer(UnitTestCase):
                 self.assertFalse(tool.annotations.destructive_hint)
             else:
                 self.assertTrue(tool.annotations.read_only_hint, f"{tool.name} isn't marked read-only")
+
+    async def test_every_amazon_tool_takes_site(self):
+        # GIVEN
+        server = create_server(self.saved_session)
+
+        # WHEN
+        async with Client(server) as client:
+            tools = (await client.list_tools()).tools
+
+        # THEN
+        for tool in tools:
+            if tool.name not in ("get_config", "update_config"):
+                self.assertIn("site", tool.input_schema["properties"], f"{tool.name} doesn't take site")
+                self.assertNotIn("site", tool.input_schema.get("required", []))
 
     async def test_tools_publish_generated_schema(self):
         # GIVEN
@@ -60,10 +78,9 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertFalse(result.is_error)
-        self.assertEqual({"signed_in": False, "site": "https://www.amazon.com",
-                          "sign_in": f"Offer to sign the user in with `sign_in`, or they can run "
-                                     f"`{SIGN_IN_COMMAND}` in a terminal."},
-                         result.structured_content)
+        signed_out = {"signed_in": False, "site": "https://www.amazon.com", "default": True,
+                      "sign_in": SIGN_IN_ADVICE, "error": None}
+        self.assertEqual({**signed_out, "sites": [signed_out]}, result.structured_content)
 
     async def test_check_session_with_saved_session(self):
         # GIVEN
@@ -75,8 +92,9 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertFalse(result.is_error)
-        self.assertEqual({"signed_in": True, "site": "https://www.amazon.com", "sign_in": None},
-                         result.structured_content)
+        signed_in = {"signed_in": True, "site": "https://www.amazon.com", "default": True, "sign_in": None,
+                     "error": None}
+        self.assertEqual({**signed_in, "sites": [signed_in]}, result.structured_content)
 
     async def test_check_session_with_expired_saved_session(self):
         # GIVEN
@@ -90,10 +108,9 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertFalse(result.is_error)
-        self.assertEqual({"signed_in": False, "site": "https://www.amazon.com",
-                          "sign_in": f"Offer to sign the user in with `sign_in`, or they can run "
-                                     f"`{SIGN_IN_COMMAND}` in a terminal."},
-                         result.structured_content)
+        signed_out = {"signed_in": False, "site": "https://www.amazon.com", "default": True,
+                      "sign_in": SIGN_IN_ADVICE, "error": None}
+        self.assertEqual({**signed_out, "sites": [signed_out]}, result.structured_content)
 
     async def test_check_session_trusts_saved_session_when_amazon_unreachable(self):
         # GIVEN
@@ -106,9 +123,107 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertFalse(result.is_error)
-        self.assertEqual({"signed_in": True, "site": "https://www.amazon.com", "sign_in": None},
-                         result.structured_content)
+        signed_in = {"signed_in": True, "site": "https://www.amazon.com", "default": True, "sign_in": None,
+                     "error": None}
+        self.assertEqual({**signed_in, "sites": [signed_in]}, result.structured_content)
         self.assertEqual(1, history_response.call_count)
+
+    async def test_check_session_checks_every_site_with_saved_session(self):
+        # GIVEN
+        self.given_saved_session("amazon.com", "amazon.de")
+        self.given_page_exists(self.test_config.constants.ORDER_HISTORY_URL, "orders/order-history-2018-0.html")
+        self.responses.add(responses.GET, "https://www.amazon.de/your-orders/orders", status=302,
+                           headers={"Location": "https://www.amazon.de/ap/signin"})
+        self.responses.add(responses.GET, "https://www.amazon.de/ap/signin", status=200)
+
+        # WHEN
+        result = await self.call_tool("check_session")
+
+        # THEN
+        self.assertFalse(result.is_error)
+        signed_in = {"signed_in": True, "site": "https://www.amazon.com", "default": True, "sign_in": None,
+                     "error": None}
+        signed_out = {"signed_in": False, "site": "https://www.amazon.de", "default": False,
+                      "sign_in": "Offer to sign the user in with `sign_in` and `site` set to `amazon.de`, or they "
+                                 "can run `amazon-orders --domain amazon.de login --browser` in a terminal.",
+                      "error": None}
+        self.assertEqual({**signed_in, "sites": [signed_in, signed_out]}, result.structured_content)
+
+    async def test_check_session_on_site(self):
+        # GIVEN
+        self.given_saved_session("amazon.com", "amazon.de")
+        self.given_page_exists("https://www.amazon.de/your-orders/orders", "orders/order-history-2018-0.html")
+
+        # WHEN
+        result = await self.call_tool("check_session", {"site": "amazon.de"})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        signed_in = {"signed_in": True, "site": "https://www.amazon.de", "default": False, "sign_in": None,
+                     "error": None}
+        self.assertEqual({**signed_in, "sites": [signed_in]}, result.structured_content)
+
+    async def test_check_session_on_unknown_site(self):
+        # WHEN
+        result = await self.call_tool("check_session", {"site": "ebay.com"})
+
+        # THEN
+        self.assert_tool_error(result, "\"ebay.com\" isn't an Amazon site that can be read.")
+
+    async def test_site_accepts_identifier_check_session_returns(self):
+        # GIVEN
+        self.given_saved_session("amazon.com", "amazon.de")
+        self.given_page_exists(self.test_config.constants.ORDER_HISTORY_URL, "orders/order-history-2018-0.html")
+        self.given_page_exists("https://www.amazon.de/your-orders/orders", "orders/order-history-2018-0.html")
+        site = (await self.call_tool("check_session")).structured_content["sites"][1]["site"]
+
+        # WHEN
+        result = await self.call_tool("check_session", {"site": site})
+
+        # THEN
+        self.assertEqual("https://www.amazon.de", site)
+        self.assertFalse(result.is_error)
+        self.assertEqual([(site, True)],
+                         [(status["site"], status["signed_in"]) for status in result.structured_content["sites"]])
+
+    async def test_check_session_reports_site_amazon_could_not_be_checked_on(self):
+        # GIVEN
+        self.given_saved_session("amazon.com", "amazon.de")
+        self.given_page_exists(self.test_config.constants.ORDER_HISTORY_URL, "orders/order-history-2018-0.html")
+
+        # WHEN
+        result = await self.call_tool("check_session")
+
+        # THEN the other sites are still reported
+        self.assertFalse(result.is_error)
+        self.assertTrue(result.structured_content["signed_in"])
+        de_status = result.structured_content["sites"][1]
+        self.assertEqual(("https://www.amazon.de", False, False),
+                         (de_status["site"], de_status["signed_in"], de_status["default"]))
+        self.assertIn("Could not check the session on amazon.de.", de_status["error"])
+
+    @patch("amazonorders_mcp.session.PlaywrightBrowserLogin")
+    async def test_sign_in_on_site(self, mock_browser_login):
+        # WHEN
+        result = await self.call_tool("sign_in", {"site": "amazon.de"})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        signed_in = {"signed_in": True, "site": "https://www.amazon.de", "default": False, "sign_in": None,
+                     "error": None}
+        self.assertEqual({**signed_in, "sites": [signed_in]}, result.structured_content)
+        amazon_session = mock_browser_login.call_args.args[0]
+        self.assertEqual("https://www.amazon.de", amazon_session.config.constants.BASE_URL)
+        self.assertEqual(os.path.join(self.config_dir, "cookies.amazon.de.json"),
+                         amazon_session.config.cookie_jar_path)
+        mock_browser_login.return_value.login.assert_called_once_with(ANY)
+
+    async def test_sign_in_on_unknown_site(self):
+        # WHEN
+        result = await self.call_tool("sign_in", {"site": "ebay.com"})
+
+        # THEN
+        self.assert_tool_error(result, "\"ebay.com\" isn't an Amazon site that can be read.")
 
     async def test_get_order_history_without_saved_session(self):
         # WHEN
@@ -156,6 +271,58 @@ class TestServer(UnitTestCase):
         mock_amazon_orders.return_value.get_order_history_page.assert_called_once_with(
             year=None, start_index=None, full_details=False, time_filter=None, order_filter=None,
             family_member_id=None, limit=None, cursor=cursor, progress_with_total=ANY)
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_get_order_history_on_site(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session("amazon.com", "amazon.de")
+        mock_amazon_orders.return_value.get_order_history_page.return_value = PagedResults(
+            self.given_entities({"order_number": "302-0000000-0000001"}), None)
+
+        # WHEN
+        result = await self.call_tool("get_order_history", {"site": "amazon.de", "limit": 1})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual({"items": [{"order_number": "302-0000000-0000001"}], "cursor": None, "has_more": False},
+                         result.structured_content)
+        amazon_session = mock_amazon_orders.call_args.args[0]
+        self.assertEqual("https://www.amazon.de", amazon_session.config.constants.BASE_URL)
+        self.assertEqual(os.path.join(self.config_dir, "cookies.amazon.de.json"),
+                         amazon_session.config.cookie_jar_path)
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_get_order_history_on_default_site(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session("amazon.com", "amazon.de")
+        mock_amazon_orders.return_value.get_order_history_page.return_value = PagedResults([], None)
+
+        # WHEN
+        result = await self.call_tool("get_order_history")
+
+        # THEN
+        self.assertFalse(result.is_error)
+        amazon_session = mock_amazon_orders.call_args.args[0]
+        self.assertIs(self.test_config, amazon_session.config)
+        self.assertEqual("https://www.amazon.com", amazon_session.config.constants.BASE_URL)
+
+    async def test_get_order_on_site_without_saved_session(self):
+        # GIVEN
+        self.given_saved_session()
+
+        # WHEN
+        result = await self.call_tool("get_order", {"order_id": "302-0000000-0000001", "site": "amazon.es"})
+
+        # THEN
+        self.assert_tool_error(result, "There's no saved Amazon session.", "`site` set to `amazon.es`",
+                               "`amazon-orders --domain amazon.es login --browser`")
+
+    async def test_get_order_on_unknown_site(self):
+        # WHEN
+        result = await self.call_tool("get_order", {"order_id": "302-0000000-0000001", "site": "amazon.example"})
+
+        # THEN
+        self.assert_tool_error(result, "\"amazon.example\" isn't an Amazon site that can be read. Supported sites: ")
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_order_history_reports_progress(self, mock_amazon_orders):

@@ -9,6 +9,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 
 - `--transport streamable-http`, to serve remote MCP clients over HTTP, with `--host`, `--port`, `--json-response`, a bearer token (required off loopback), and a `/health` endpoint.
+- `site` on every tool that reads Amazon, e.g. `amazon.de`, to read several Amazon sites from one server, each with its own saved session (in `amazon-orders`' own cookie jar for the site).
+- `check_session` checks every site with a saved session, says which is the default, and reports a site it couldn't check without failing the others.
 
 ## [1.4.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.3.1...1.4.0) - 2026-10-21
 
