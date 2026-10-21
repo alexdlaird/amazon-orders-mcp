@@ -93,6 +93,7 @@ Just ask your assistant about your orders, and it will use the following tools:
 | `sign_in`                | Opens a browser window for you to sign in to Amazon, when you ask          |
 | `get_order_history`      | A batch of orders by year, time filter or order type, optionally detailed  |
 | `get_order`              | One order, by order number                                                 |
+| `search_orders`          | A batch of items by product, order number, address or recipient, any year  |
 | `get_tracking`           | A shipment's carrier and tracking number, from an order's shipment ID      |
 | `get_invoice_pdfs`       | An order's invoice and credit note PDFs, where the seller issues them      |
 | `get_transactions`       | A batch of payment transactions over a number of days, or for an order     |

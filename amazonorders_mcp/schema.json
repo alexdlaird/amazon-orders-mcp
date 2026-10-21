@@ -106,7 +106,7 @@
                       },
                       "delivery_status": {
                         "type": "string",
-                        "description": "The Shipment delivery status."
+                        "description": "The Shipment delivery status, or `None` once Amazon stops showing it, some weeks after delivery."
                       },
                       "tracking_link": {
                         "type": "string",
@@ -392,7 +392,7 @@
                 },
                 "delivery_status": {
                   "type": "string",
-                  "description": "The Shipment delivery status."
+                  "description": "The Shipment delivery status, or `None` once Amazon stops showing it, some weeks after delivery."
                 },
                 "tracking_link": {
                   "type": "string",
@@ -587,6 +587,111 @@
           "tracking_number": {
             "type": "string",
             "description": "The carrier's tracking number, e.g. `1Z999AA10123456784` or `TBA000000000000`. Always a `str`, since many (e.g. USPS) are all digits and may have leading zeros."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "search_orders": {
+      "description": "Search every year of the Order history for Orders by product title, Order number, address, or recipient, as the search box on Your Orders does, getting each matching Item with its Order's number and date.",
+      "parameters": {
+        "query": "What to search for: words from a product title, an Order number, or a name or address an Order was sent to.",
+        "limit": "Stop fetching result pages once at least this many results are collected. Whole pages are fetched, so the batch can hold up to a page more than `limit`. `None` fetches every page.",
+        "cursor": "The `cursor` of the previous batch, to fetch the next one."
+      },
+      "output_schema": {
+        "type": "object",
+        "description": "The OrderSearchResults, one per matching Item, or an empty list if nothing matched.",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "An Item of an Order that matched an Order search. The Order search page lists each matching Item, with its Order's number and date, from every year of the Order history. The Order itself is fetched by `order_number` with `get_order`.",
+              "properties": {
+                "order_details_link": {
+                  "type": "string",
+                  "description": "The Order details link. `None` if the result has none."
+                },
+                "order_number": {
+                  "type": "string",
+                  "description": "The number of the Order the Item is in, from `order_details_link`."
+                },
+                "order_placed_date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "The date the Order was placed."
+                },
+                "item": {
+                  "type": "object",
+                  "description": "The matching Item, built with the config's `item_class`. The search page shows its title, link, image, and quantity (only when more than one was ordered), not its price or Seller.",
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "description": "The Item title."
+                    },
+                    "link": {
+                      "type": "string",
+                      "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                    },
+                    "asin": {
+                      "type": "string",
+                      "description": "The product ASIN, derived from `link`; `None` when the link is not a product page."
+                    },
+                    "price": {
+                      "type": "number",
+                      "description": "The Item price."
+                    },
+                    "seller": {
+                      "type": "object",
+                      "description": "The Item Seller.",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "The Seller name."
+                        },
+                        "link": {
+                          "type": "string",
+                          "description": "The Seller link."
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "condition": {
+                      "type": "string",
+                      "description": "The Item condition."
+                    },
+                    "return_eligible_date": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "The Item return eligible date."
+                    },
+                    "image_link": {
+                      "type": "string",
+                      "description": "The Item image URL."
+                    },
+                    "quantity": {
+                      "type": "integer",
+                      "description": "The Item quantity. `None` when the page shows none, and for items sold by weight (e.g. Whole Foods), which have no whole-unit count."
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": true
+            },
+            "description": "The results in this batch."
+          },
+          "cursor": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Pass this back as `cursor` to the same call to fetch the next batch. A JSON-safe `dict` to keep as it is, not to build or change. `None` when there are no more results."
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "`True` if there are more results to fetch with `cursor`."
           }
         },
         "additionalProperties": true
