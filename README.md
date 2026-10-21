@@ -77,12 +77,13 @@ It listens at `http://127.0.0.1:8000/mcp` (change that with `--host` and `--port
 `--json-response` is passed, which answers each request with JSON instead, for a proxy that doesn't stream.
 
 > **Warning:** The server has no sign-in of its own: anyone who can reach it can use its tools with the Amazon account
-> it's signed in to. Only listen on `127.0.0.1`, or behind a reverse proxy that authenticates clients. On `127.0.0.1`,
-> only requests addressed to `127.0.0.1` or `localhost` are accepted, so a proxy on the same machine must pass that as
-> the `Host`.
+> it's signed in to. On a loopback address (`127.0.0.1`, `localhost` or `::1`), only requests addressed to one of them
+> are accepted, so a proxy on the same machine must pass that as the `Host`.
 
-To also have the server check a bearer token, put it in a file and pass `--token-file <path>`, or set
-`AMAZON_ORDERS_MCP_TOKEN`. Every request but `/health` must then carry `Authorization: Bearer <token>`.
+To have the server check a bearer token, put it in a file and pass `--token-file <path>`, or set
+`AMAZON_ORDERS_MCP_TOKEN`. Every request but `/health` must then carry `Authorization: Bearer <token>`. A token is
+required on any other `--host`, e.g. `0.0.0.0` in a container, since anyone who can reach that address could otherwise
+use the tools. A reverse proxy in front can add the header.
 
 `sign_in` still opens its browser window on the machine the server runs on.
 

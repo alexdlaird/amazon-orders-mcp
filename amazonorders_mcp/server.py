@@ -90,6 +90,10 @@ TRANSPORTS = ("stdio", "streamable-http")
 #: The address the server listens on over HTTP by default, which only this machine can reach.
 DEFAULT_HOST = "127.0.0.1"
 
+#: The addresses only this machine can reach, on which the SDK also rejects requests addressed to another host (DNS
+#: rebinding). On any other address, the server only starts with a bearer token.
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
 #: The port the server listens on over HTTP by default.
 DEFAULT_PORT = 8000
 
@@ -538,24 +542,35 @@ def _parse_args(args: Optional[List[str]]) -> argparse.Namespace:
                              "stream. Progress isn't reported then.")
     parser.add_argument("--token-file",
                         help="A file holding a bearer token that every HTTP request must carry, or set "
-                             f"{AUTHORIZATION_ENVIRONMENT_VARIABLE} instead. By default, no token is checked.")
+                             f"{AUTHORIZATION_ENVIRONMENT_VARIABLE} instead. Required unless --host is a loopback "
+                             "address; there, no token is checked by default.")
     parsed_args = parser.parse_args(args)
+    parsed_args.token = _read_token(parser, parsed_args.token_file)
 
-    environment_token = os.environ.get(AUTHORIZATION_ENVIRONMENT_VARIABLE) or None
-    if parsed_args.token_file is None:
-        parsed_args.token = environment_token
-    elif environment_token is not None:
-        parser.error(f"Set either --token-file or {AUTHORIZATION_ENVIRONMENT_VARIABLE}, not both.")
-    else:
-        try:
-            with open(parsed_args.token_file, "r", encoding="utf-8") as f:
-                parsed_args.token = f.read().strip()
-        except OSError as e:
-            parser.error(f"Could not read --token-file: {e}")
-        if not parsed_args.token:
-            parser.error(f"--token-file {parsed_args.token_file} is empty.")
+    if parsed_args.transport == "streamable-http" and parsed_args.host not in LOOPBACK_HOSTS and not parsed_args.token:
+        parser.error(f"--host {parsed_args.host} can be reached from other machines, so set --token-file or "
+                     f"{AUTHORIZATION_ENVIRONMENT_VARIABLE} too, or anyone who can reach it could use its tools.")
 
     return parsed_args
+
+
+def _read_token(parser: argparse.ArgumentParser,
+                token_file: Optional[str]) -> Optional[str]:
+    environment_token = os.environ.get(AUTHORIZATION_ENVIRONMENT_VARIABLE) or None
+    if token_file is None:
+        return environment_token
+    if environment_token is not None:
+        parser.error(f"Set either --token-file or {AUTHORIZATION_ENVIRONMENT_VARIABLE}, not both.")
+
+    try:
+        with open(token_file, "r", encoding="utf-8") as f:
+            token = f.read().strip()
+    except OSError as e:
+        parser.error(f"Could not read --token-file: {e}")
+    if not token:
+        parser.error(f"--token-file {token_file} is empty.")
+
+    return token
 
 
 def main(args: Optional[List[str]] = None) -> None:

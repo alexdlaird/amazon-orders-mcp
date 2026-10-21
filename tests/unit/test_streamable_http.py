@@ -204,7 +204,8 @@ class TestStreamableHttp(UnitTestCase):
 
     async def test_command_line_serves_streamable_http(self):
         # WHEN
-        mock_uvicorn_run = self.given_app_from_command_line("--host", "192.0.2.10", "--port", "9000")
+        with patch.dict(os.environ, {AUTHORIZATION_ENVIRONMENT_VARIABLE: BEARER}):
+            mock_uvicorn_run = self.given_app_from_command_line("--host", "192.0.2.10", "--port", "9000")
 
         # THEN
         mock_uvicorn_run.assert_called_once()
@@ -254,6 +255,27 @@ class TestStreamableHttp(UnitTestCase):
 
         # THEN
         self.assertIn(f"Set either --token-file or {AUTHORIZATION_ENVIRONMENT_VARIABLE}, not both.", stderr.getvalue())
+
+    def test_command_line_requires_token_off_loopback(self):
+        # GIVEN
+        stderr = io.StringIO()
+
+        # WHEN
+        with redirect_stderr(stderr), self.assertRaises(SystemExit):
+            main(["--transport", "streamable-http", "--host", "192.0.2.10"])
+
+        # THEN
+        self.assertIn("can be reached from other machines", stderr.getvalue())
+
+    def test_command_line_serves_loopback_without_token(self):
+        for host in ("127.0.0.1", "localhost", "::1"):
+            with self.subTest(host=host):
+                # WHEN
+                with patch("amazonorders_mcp.server.uvicorn.run") as mock_uvicorn_run:
+                    main(["--transport", "streamable-http", "--host", host])
+
+                # THEN
+                self.assertEqual(host, mock_uvicorn_run.call_args.kwargs["host"])
 
     def test_command_line_rejects_empty_token_file(self):
         # GIVEN
