@@ -63,6 +63,30 @@ installed it with `pip install amazon-orders-mcp`:
 }
 ```
 
+### Remote Clients
+
+For clients that connect to a server instead of running one, the server can also serve
+[Streamable HTTP](https://modelcontextprotocol.io/specification/latest/basic/transports/streamable-http):
+
+```sh
+uvx amazon-orders-mcp --transport streamable-http
+```
+
+It listens at `http://127.0.0.1:8000/mcp` (change that with `--host` and `--port`), and answers `GET /health` with
+`ok`, without calling Amazon, for health checks. A call's progress is reported on an event stream, unless
+`--json-response` is passed, which answers each request with JSON instead, for a proxy that doesn't stream.
+
+> **Warning:** The server has no sign-in of its own: anyone who can reach it can use its tools with the Amazon account
+> it's signed in to. On a loopback address (`127.0.0.1`, `localhost` or `::1`), only requests addressed to one of them
+> are accepted, so a proxy on the same machine must pass that as the `Host`.
+
+To have the server check a bearer token, put it in a file and pass `--token-file <path>`, or set
+`AMAZON_ORDERS_MCP_TOKEN`. Every request but `/health` must then carry `Authorization: Bearer <token>`. A token is
+required on any other `--host`, e.g. `0.0.0.0` in a container, since anyone who can reach that address could otherwise
+use the tools. A reverse proxy in front can add the header.
+
+`sign_in` still opens its browser window on the machine the server runs on.
+
 ## Basic Usage
 
 Just ask your assistant about your orders, and it will use the following tools:

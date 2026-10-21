@@ -1,12 +1,16 @@
 __copyright__ = "Copyright (c) 2026 Alex Laird"
 __license__ = "MIT"
 
+import argparse
+import hmac
 import json
 import logging
+import os
 from functools import partial
 from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, TypeVar, Union
 
 import anyio
+import uvicorn
 from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.gift_card_activity import GiftCardActivity
 from amazonorders.entity.invoice_pdf import InvoicePdf
@@ -25,6 +29,10 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
+from starlette.datastructures import Headers
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse, Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from amazonorders_mcp import __version__
 from amazonorders_mcp.schema import (
@@ -74,6 +82,26 @@ SIGN_IN_REPORT_INTERVAL = 5
 
 #: How many results a paged tool collects when the client doesn't say, so a bare call stays bounded.
 DEFAULT_LIMIT = 25
+
+#: The transports the server runs over: ``stdio`` for a client that runs the server, and ``streamable-http`` for
+#: clients that connect to it.
+TRANSPORTS = ("stdio", "streamable-http")
+
+#: The address the server listens on over HTTP by default, which only this machine can reach.
+DEFAULT_HOST = "127.0.0.1"
+
+#: The addresses only this machine can reach, on which the SDK also rejects requests addressed to another host (DNS
+#: rebinding). On any other address, the server only starts with a bearer token.
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+#: The port the server listens on over HTTP by default.
+DEFAULT_PORT = 8000
+
+#: The path that answers a health check over HTTP, without a token and without calling Amazon.
+HEALTH_PATH = "/health"
+
+#: The environment variable that can hold the bearer token HTTP clients must send, instead of ``--token-file``.
+AUTHORIZATION_ENVIRONMENT_VARIABLE = "AMAZON_ORDERS_MCP_TOKEN"
 
 T = TypeVar("T")
 
@@ -355,6 +383,67 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
     return server
 
 
+def create_http_app(server: MCPServer,
+                    host: str = DEFAULT_HOST,
+                    json_response: bool = False,
+                    token: Optional[str] = None) -> ASGIApp:
+    """
+    Create the app that serves the MCP server over Streamable HTTP, at ``/mcp``. It's stateless, since every client
+    is served from the one saved session, and :data:`HEALTH_PATH` answers ``ok`` without calling Amazon.
+
+    :param server: The server to serve.
+    :param host: The address the app listens on. On localhost, only requests addressed to localhost are accepted, so
+        another site can't reach the server through the user's browser.
+    :param json_response: Whether to answer each request with JSON, instead of an event stream that also carries the
+        call's progress.
+    :param token: A bearer token every request but the health check must carry, if the server checks one.
+    :return: The app.
+    """
+    app = server.streamable_http_app(stateless_http=True, json_response=json_response, host=host)
+    app.add_route(HEALTH_PATH, _health, methods=["GET"], include_in_schema=False)
+    if token is None:
+        return app
+
+    return BearerTokenMiddleware(app, token)
+
+
+class BearerTokenMiddleware:
+    """
+    Requires ``Authorization: Bearer <token>`` on every HTTP request but the health check, and answers ``401`` to one
+    without it.
+
+    :param app: The app to protect.
+    :param token: The bearer token.
+    """
+
+    def __init__(self,
+                 app: ASGIApp,
+                 token: str) -> None:
+        self.app = app
+        self._token = token.encode("utf-8")
+
+    async def __call__(self,
+                       scope: Scope,
+                       receive: Receive,
+                       send: Send) -> None:
+        if scope["type"] == "http" and scope["path"] != HEALTH_PATH and not self._authorized(Headers(scope=scope)):
+            response = PlainTextResponse("Unauthorized", status_code=401, headers={"WWW-Authenticate": "Bearer"})
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
+
+    def _authorized(self,
+                    headers: Headers) -> bool:
+        scheme, _, token = headers.get("authorization", "").partition(" ")
+
+        return scheme.lower() == "bearer" and hmac.compare_digest(token.strip().encode("utf-8"), self._token)
+
+
+async def _health(request: Request) -> Response:
+    return PlainTextResponse("ok")
+
+
 def _session_status(session: SavedSession) -> SessionStatus:
     try:
         session.run(_check_signed_in)
@@ -436,8 +525,66 @@ def _describe_error(error: AmazonOrdersError) -> str:
     return f"{error} Context: {json.dumps(error.meta, default=str)}"
 
 
-def main() -> None:
+def _parse_args(args: Optional[List[str]]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="amazon-orders-mcp",
+                                     description="An MCP server for Amazon order history, line items, and "
+                                                 "transactions, built on amazon-orders.")
+    parser.add_argument("--transport", choices=TRANSPORTS, default="stdio",
+                        help="stdio (the default) for a client that runs the server, or streamable-http to serve "
+                             "clients that connect to it over HTTP.")
+    parser.add_argument("--host", default=DEFAULT_HOST,
+                        help=f"The address to listen on over HTTP (default: {DEFAULT_HOST}, which only this machine "
+                             "can reach).")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT,
+                        help=f"The port to listen on over HTTP (default: {DEFAULT_PORT}).")
+    parser.add_argument("--json-response", action="store_true",
+                        help="Answer each HTTP request with JSON instead of an event stream, for a proxy that doesn't "
+                             "stream. Progress isn't reported then.")
+    parser.add_argument("--token-file",
+                        help="A file holding a bearer token that every HTTP request must carry, or set "
+                             f"{AUTHORIZATION_ENVIRONMENT_VARIABLE} instead. Required unless --host is a loopback "
+                             "address; there, no token is checked by default.")
+    parsed_args = parser.parse_args(args)
+    parsed_args.token = _read_token(parser, parsed_args.token_file)
+
+    if parsed_args.transport == "streamable-http" and parsed_args.host not in LOOPBACK_HOSTS and not parsed_args.token:
+        parser.error(f"--host {parsed_args.host} can be reached from other machines, so set --token-file or "
+                     f"{AUTHORIZATION_ENVIRONMENT_VARIABLE} too, or anyone who can reach it could use its tools.")
+
+    return parsed_args
+
+
+def _read_token(parser: argparse.ArgumentParser,
+                token_file: Optional[str]) -> Optional[str]:
+    environment_token = os.environ.get(AUTHORIZATION_ENVIRONMENT_VARIABLE) or None
+    if token_file is None:
+        return environment_token
+    if environment_token is not None:
+        parser.error(f"Set either --token-file or {AUTHORIZATION_ENVIRONMENT_VARIABLE}, not both.")
+
+    try:
+        with open(token_file, "r", encoding="utf-8") as f:
+            token = f.read().strip()
+    except OSError as e:
+        parser.error(f"Could not read --token-file: {e}")
+    if not token:
+        parser.error(f"--token-file {token_file} is empty.")
+
+    return token
+
+
+def main(args: Optional[List[str]] = None) -> None:
     """
-    Run the MCP server over stdio.
+    Run the MCP server, over stdio, or over Streamable HTTP with ``--transport streamable-http``.
+
+    :param args: The command line arguments, by default the ones the server was started with.
     """
-    create_server().run()
+    parsed_args = _parse_args(args)
+    server = create_server()
+    if parsed_args.transport == "stdio":
+        server.run()
+        return
+
+    app = create_http_app(server, host=parsed_args.host, json_response=parsed_args.json_response,
+                          token=parsed_args.token)
+    uvicorn.run(app, host=parsed_args.host, port=parsed_args.port, log_level=server.settings.log_level.lower())
