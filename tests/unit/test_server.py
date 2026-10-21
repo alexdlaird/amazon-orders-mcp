@@ -194,11 +194,11 @@ class TestServer(UnitTestCase):
         # WHEN
         result = await self.call_tool("check_session")
 
-        # THEN the other sites are still reported
+        # THEN
         self.assertFalse(result.is_error)
         self.assertTrue(result.structured_content["signed_in"])
         de_status = result.structured_content["sites"][1]
-        self.assertEqual(("https://www.amazon.de", False, False),
+        self.assertEqual(("https://www.amazon.de", None, False),
                          (de_status["site"], de_status["signed_in"], de_status["default"]))
         self.assertIn("Could not check the session on amazon.de.", de_status["error"])
 

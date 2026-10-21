@@ -92,7 +92,7 @@ class TestSession(UnitTestCase):
         with self.assertRaises(AmazonOrdersError) as cm:
             self.saved_session.run(lambda signed_in_session: signed_in_session, "amazon.com")
 
-        # THEN an environment variable outranks every other config source, so every call reads its site
+        # THEN
         self.assertEqual("https://www.amazon.de", default_session.config.constants.BASE_URL)
         self.assertEqual(os.path.join(self.config_dir, "cookies.amazon.de.json"),
                          default_session.config.cookie_jar_path)
@@ -151,7 +151,7 @@ class TestSession(UnitTestCase):
         # WHEN
         value, saved = self.saved_session.update_config("domain", "https://www.amazon.de")
 
-        # THEN each site keeps its own cookie jar
+        # THEN
         self.assertEqual(("amazon.de", True), (value, saved))
         self.assertEqual("amazon.de", AmazonOrdersConfig(config_path=self.test_config.config_path).domain)
         self.assertEqual("amazon.de", self.saved_session.site())

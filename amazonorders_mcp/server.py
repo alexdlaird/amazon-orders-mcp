@@ -128,15 +128,16 @@ class SiteSessionStatus(BaseModel):
     The user's session status on an Amazon site.
     """
 
-    signed_in: bool = Field(description="Whether Amazon still accepts the user's saved session for the site. If "
-                                        "Amazon couldn't be reached to check, a saved session is assumed to still "
-                                        "work.")
+    signed_in: Optional[bool] = Field(description="Whether Amazon still accepts the user's saved session for the "
+                                                  "site. If Amazon answers the check with an error page, a saved "
+                                                  "session is assumed to still work. Null if the session couldn't be "
+                                                  "checked at all.")
     site: str = Field(description="The Amazon site, as `site` accepts it.")
     default: bool = Field(description="Whether it's the user's default site, which tools read when they aren't "
                                       "given `site`.")
     sign_in: Optional[str] = Field(default=None, description="What to do to sign in, if the user isn't.")
     error: Optional[str] = Field(default=None, description="Why the session couldn't be checked, if it couldn't. "
-                                                           "`signed_in` is false then.")
+                                                           "`signed_in` is null then.")
 
 
 class SessionStatus(SiteSessionStatus):
@@ -547,7 +548,7 @@ def _site_session_status(session: SavedSession,
                 signed_in = False
         base_url = session.base_url(site)
     except AmazonOrdersError as e:
-        return SiteSessionStatus(signed_in=False, site=_site_base_url(session, site), default=default,
+        return SiteSessionStatus(signed_in=None, site=_site_base_url(session, site), default=default,
                                  error=f"Could not check the session on {site}. {_describe_error(e)}")
 
     return SiteSessionStatus(signed_in=signed_in, site=base_url, default=default,

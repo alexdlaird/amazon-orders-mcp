@@ -239,6 +239,8 @@ class SavedSession:
                 if site == default_site:
                     continue
                 site_config.set_domain(site)
+                if site_config.cookie_jar_path == config.cookie_jar_path:
+                    break
                 if os.path.exists(site_config.cookie_jar_path):
                     sites.append(site)
 
