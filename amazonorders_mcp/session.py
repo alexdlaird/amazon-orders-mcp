@@ -257,17 +257,6 @@ class SavedSession:
         return amazon_session
 
 
-def has_display() -> bool:
-    """
-    Check whether a browser window can be opened for the user to sign in, as ``amazon-orders`` checks before it opens
-    one: on Linux, only with a display, which a server or a container usually doesn't have.
-
-    :return: Whether there's a display.
-    """
-    return (not sys.platform.startswith("linux") or
-            bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")))
-
-
 def _cookie_jar_mtime(config: AmazonOrdersConfig) -> Optional[float]:
     try:
         return os.path.getmtime(config.cookie_jar_path)

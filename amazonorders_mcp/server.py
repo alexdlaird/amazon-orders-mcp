@@ -25,6 +25,7 @@ from amazonorders.paging import PagedResults
 from amazonorders.prime import AmazonPrime
 from amazonorders.session import AmazonSession
 from amazonorders.transactions import AmazonTransactions
+from amazonorders.util import has_display
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -53,7 +54,6 @@ from amazonorders_mcp.session import (
     SIGN_IN_COMMAND,
     SIGN_IN_TIMEOUT,
     SavedSession,
-    has_display,
 )
 
 logger = logging.getLogger(__name__)

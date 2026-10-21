@@ -133,6 +133,14 @@ mounted there instead must be writable by UID 1000):
 docker run -i --rm -v amazon-orders:/home/app/.config/amazonorders amazon-orders-mcp
 ```
 
+To serve [remote clients](#remote-clients) instead, listen on all of the container's interfaces. That needs a bearer
+token, which a reverse proxy in front can add:
+
+```sh
+docker run -d -p 127.0.0.1:8000:8000 -e AMAZON_ORDERS_MCP_TOKEN -v amazon-orders:/home/app/.config/amazonorders \
+    amazon-orders-mcp --transport streamable-http --host 0.0.0.0
+```
+
 There's no display in a container, so `sign_in` can't open a browser window there. Instead, sign in with
 `amazon-orders login`, in a one-off container on the same volume. It runs from the `login` image, which adds the
 Chromium that `amazon-orders` uses to clear Amazon's JavaScript challenges while signing in (the server's image has no
