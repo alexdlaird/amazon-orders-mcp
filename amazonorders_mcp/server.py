@@ -25,6 +25,7 @@ from amazonorders.paging import PagedResults
 from amazonorders.prime import AmazonPrime
 from amazonorders.session import AmazonSession
 from amazonorders.transactions import AmazonTransactions
+from amazonorders.util import has_display
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -48,7 +49,12 @@ from amazonorders_mcp.schema import (
     parameter_field,
     tool_description,
 )
-from amazonorders_mcp.session import SIGN_IN_COMMAND, SIGN_IN_TIMEOUT, SavedSession
+from amazonorders_mcp.session import (
+    HEADLESS_SIGN_IN_COMMAND,
+    SIGN_IN_COMMAND,
+    SIGN_IN_TIMEOUT,
+    SavedSession,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +86,9 @@ UPDATE_CONFIG = ToolAnnotations(read_only_hint=False, destructive_hint=False, id
 
 #: Where what each config key does is documented.
 CONFIG_DOCS_URL = "https://amazon-orders.readthedocs.io/api.html#amazonorders.conf.AmazonOrdersConfig"
+
+#: Where signing in with credentials, instead of a browser window, is documented.
+AUTOMATED_SIGN_IN_DOCS_URL = "https://amazon-orders.readthedocs.io/#automating-authentication"
 
 #: How many seconds pass between the reports that keep a client waiting on ``sign_in``.
 SIGN_IN_REPORT_INTERVAL = 5
@@ -210,6 +219,16 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
                 description="The Amazon site to sign in to, e.g. `amazon.de`, since each site has its own sign-in. "
                             "By default, the user's default site.")] = None
     ) -> SessionStatus:
+        if not has_display():
+            logger.debug("Tool call failed, there's no display to open a browser window on")
+
+            raise ToolError("There's no display where the server runs, so it can't open a browser window for the "
+                            f"user to sign in. Instead, they can sign in there with `{HEADLESS_SIGN_IN_COMMAND}`, "
+                            "using the server's config directory (for a server in a container, from a one-off "
+                            "container on the same volume), and enter their credentials, or set them in that "
+                            f"command's environment: {AUTOMATED_SIGN_IN_DOCS_URL}. The server uses the new session "
+                            "on its next call.")
+
         failure: Optional[AmazonOrdersError] = None
         try:
             site = await anyio.to_thread.run_sync(session.site, site)

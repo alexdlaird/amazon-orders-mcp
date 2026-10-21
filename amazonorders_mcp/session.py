@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 #: The command that signs in from a terminal, for a client that can't use the ``sign_in`` tool.
 SIGN_IN_COMMAND = "amazon-orders login --browser"
 
+#: The command that signs in without a browser window, with the user's credentials, where there's no display.
+HEADLESS_SIGN_IN_COMMAND = "amazon-orders login"
+
 #: What a sign-in reports while it waits for the user.
 WAITING_TO_SIGN_IN_STATUS = "Waiting for the user to sign in to Amazon ..."
 

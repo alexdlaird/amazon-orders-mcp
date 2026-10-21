@@ -11,6 +11,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `--transport streamable-http`, to serve remote MCP clients over HTTP, with `--host`, `--port`, `--json-response`, a bearer token (required off loopback), and a `/health` endpoint.
 - `site` on every tool that reads Amazon, e.g. `amazon.de`, to read several Amazon sites from one server, each with its own saved session (in `amazon-orders`' own cookie jar for the site).
 - `check_session` checks every site with a saved session, says which is the default, and reports a site it couldn't check without failing the others.
+- A `login` target in the `Dockerfile`, an image with Chromium for `amazon-orders login` to clear Amazon's JavaScript challenges in a container, and a guide to running the server in one. The server's image stays without a browser.
+
+### Changed
+
+- `sign_in` says how to sign in with `amazon-orders login` where there's no display to open a browser window on, like in a container.
+- The Docker image runs as a non-root user, with its config and saved session in `/home/app/.config/amazonorders`.
 
 ## [1.4.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.3.1...1.4.0) - 2026-10-21
 

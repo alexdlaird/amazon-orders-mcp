@@ -13,8 +13,9 @@ tools for your Amazon account, available from Claude and any other MCP client.
 
 The server never sees your credentials. When you sign in, a browser window opens on Amazon's own page, and the server
 reuses the session that leaves behind. Signing in needs a display, so run the server on the machine you sign in on. On a
-machine without one, like a server or a container, use [`amazon-orders`](https://github.com/alexdlaird/amazon-orders)
-directly, with [automated authentication](https://amazon-orders.readthedocs.io/#automating-authentication).
+machine without one, like a server or a container, sign in with
+[`amazon-orders`](https://github.com/alexdlaird/amazon-orders) instead, as shown in
+[Running in a Container](#running-in-a-container).
 
 > **Note:** This server reads its data through `amazon-orders`, which works by parsing data from Amazon's
 > consumer-facing website. As Amazon provides no official API to use, older versions may break at any time, so it's
@@ -134,6 +135,49 @@ setting applies to every site.
 Two settings keep the server to one site. An `AMAZON_DOMAIN` environment variable outranks every other setting, so
 every call reads its site. And with an explicit `cookie_jar_path`, every site would share one cookie jar. To read
 several sites, set the default site with the `domain` setting, and leave `cookie_jar_path` unset.
+
+## Running in a Container
+
+The server can also run in a container, e.g. on a home server, built from this repository's `Dockerfile`:
+
+```sh
+docker build -t amazon-orders-mcp .
+```
+
+The image runs the server over stdio, as a non-root user (UID 1000), and keeps its config and saved session in
+`/home/app/.config/amazonorders`. Put that on a volume, which the server and the sign-in below share (a directory
+mounted there instead must be writable by UID 1000):
+
+```sh
+docker run -i --rm -v amazon-orders:/home/app/.config/amazonorders amazon-orders-mcp
+```
+
+To serve [remote clients](#remote-clients) instead, listen on all of the container's interfaces. That needs a bearer
+token, which a reverse proxy in front can add:
+
+```sh
+docker run -d -p 127.0.0.1:8000:8000 -e AMAZON_ORDERS_MCP_TOKEN -v amazon-orders:/home/app/.config/amazonorders \
+    amazon-orders-mcp --transport streamable-http --host 0.0.0.0
+```
+
+There's no display in a container, so `sign_in` can't open a browser window there. Instead, sign in with
+`amazon-orders login`, in a one-off container on the same volume. It runs from the `login` image, which adds the
+Chromium that `amazon-orders` uses to clear Amazon's JavaScript challenges while signing in (the server's image has no
+browser, since the server only uses the saved session):
+
+```sh
+docker build --target login -t amazon-orders-login .
+docker run -it --rm -v amazon-orders:/home/app/.config/amazonorders amazon-orders-login
+```
+
+It asks for your username and password, and a one-time passcode if your account has two-step verification. `login`
+signs out of a saved session first, and the server uses the new session on its next call, without a restart.
+
+To sign in without being asked, e.g. from a script that signs in again when the session expires, give your credentials
+to that one-off container with
+[automated authentication](https://amazon-orders.readthedocs.io/#automating-authentication)
+(`-e AMAZON_USERNAME -e AMAZON_PASSWORD -e AMAZON_OTP_SECRET_KEY`). Never give them to the server's container, which
+only needs the saved session.
 
 ## Documentation
 
