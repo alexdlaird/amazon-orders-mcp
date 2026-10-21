@@ -33,6 +33,7 @@ from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.websockets import WebSocketClose
 
 from amazonorders_mcp import __version__
 from amazonorders_mcp.schema import (
@@ -426,6 +427,9 @@ class BearerTokenMiddleware:
                        scope: Scope,
                        receive: Receive,
                        send: Send) -> None:
+        if scope["type"] == "websocket" and not self._authorized(Headers(scope=scope)):
+            await WebSocketClose()(scope, receive, send)
+            return
         if scope["type"] == "http" and scope["path"] != HEALTH_PATH and not self._authorized(Headers(scope=scope)):
             response = PlainTextResponse("Unauthorized", status_code=401, headers={"WWW-Authenticate": "Bearer"})
             await response(scope, receive, send)
@@ -556,7 +560,7 @@ def _parse_args(args: Optional[List[str]]) -> argparse.Namespace:
 
 def _read_token(parser: argparse.ArgumentParser,
                 token_file: Optional[str]) -> Optional[str]:
-    environment_token = os.environ.get(AUTHORIZATION_ENVIRONMENT_VARIABLE) or None
+    environment_token = os.environ.get(AUTHORIZATION_ENVIRONMENT_VARIABLE, "").strip() or None
     if token_file is None:
         return environment_token
     if environment_token is not None:
