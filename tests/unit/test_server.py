@@ -1,6 +1,7 @@
 __copyright__ = "Copyright (c) 2026 Alex Laird"
 __license__ = "MIT"
 
+import os
 from unittest.mock import ANY, patch
 
 import responses
@@ -9,8 +10,8 @@ from amazonorders.paging import PagedResults
 from mcp.client import Client
 
 from amazonorders_mcp.schema import SCHEMA
-from amazonorders_mcp.server import DEFAULT_LIMIT, create_server
-from amazonorders_mcp.session import SIGN_IN_COMMAND
+from amazonorders_mcp.server import AUTOMATED_SIGN_IN_DOCS_URL, DEFAULT_LIMIT, create_server
+from amazonorders_mcp.session import HEADLESS_SIGN_IN_COMMAND, SIGN_IN_COMMAND, SIGN_IN_TIMEOUT
 from tests.unittestcase import UnitTestCase
 
 
@@ -109,6 +110,30 @@ class TestServer(UnitTestCase):
         self.assertEqual({"signed_in": True, "site": "https://www.amazon.com", "sign_in": None},
                          result.structured_content)
         self.assertEqual(1, history_response.call_count)
+
+    @patch("amazonorders_mcp.server.has_display", return_value=True)
+    @patch("amazonorders_mcp.session.PlaywrightBrowserLogin")
+    async def test_sign_in_opens_browser_window(self, mock_browser_login, mock_has_display):
+        # WHEN
+        result = await self.call_tool("sign_in")
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual({"signed_in": True, "site": "https://www.amazon.com", "sign_in": None},
+                         result.structured_content)
+        mock_browser_login.return_value.login.assert_called_once_with(SIGN_IN_TIMEOUT)
+
+    @patch("amazonorders_mcp.server.has_display", return_value=False)
+    @patch("amazonorders_mcp.session.PlaywrightBrowserLogin")
+    async def test_sign_in_without_display_says_how_to_sign_in(self, mock_browser_login, mock_has_display):
+        # WHEN
+        result = await self.call_tool("sign_in", {"browser": "chromium"})
+
+        # THEN
+        self.assert_tool_error(result, "There's no display where the server runs", f"`{HEADLESS_SIGN_IN_COMMAND}`",
+                               "the server's config directory", AUTOMATED_SIGN_IN_DOCS_URL)
+        mock_browser_login.assert_not_called()
+        self.assertFalse(os.path.exists(self.test_config.config_path))
 
     async def test_get_order_history_without_saved_session(self):
         # WHEN
