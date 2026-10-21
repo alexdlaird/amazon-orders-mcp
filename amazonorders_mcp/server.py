@@ -97,7 +97,7 @@ DEFAULT_PORT = 8000
 HEALTH_PATH = "/health"
 
 #: The environment variable that can hold the bearer token HTTP clients must send, instead of ``--token-file``.
-TOKEN_ENVIRONMENT_VARIABLE = "AMAZON_ORDERS_MCP_TOKEN"
+AUTHORIZATION_ENVIRONMENT_VARIABLE = "AMAZON_ORDERS_MCP_TOKEN"
 
 T = TypeVar("T")
 
@@ -538,14 +538,14 @@ def _parse_args(args: Optional[List[str]]) -> argparse.Namespace:
                              "stream. Progress isn't reported then.")
     parser.add_argument("--token-file",
                         help="A file holding a bearer token that every HTTP request must carry, or set "
-                             f"{TOKEN_ENVIRONMENT_VARIABLE} instead. By default, no token is checked.")
+                             f"{AUTHORIZATION_ENVIRONMENT_VARIABLE} instead. By default, no token is checked.")
     parsed_args = parser.parse_args(args)
 
-    environment_token = os.environ.get(TOKEN_ENVIRONMENT_VARIABLE) or None
+    environment_token = os.environ.get(AUTHORIZATION_ENVIRONMENT_VARIABLE) or None
     if parsed_args.token_file is None:
         parsed_args.token = environment_token
     elif environment_token is not None:
-        parser.error(f"Set either --token-file or {TOKEN_ENVIRONMENT_VARIABLE}, not both.")
+        parser.error(f"Set either --token-file or {AUTHORIZATION_ENVIRONMENT_VARIABLE}, not both.")
     else:
         try:
             with open(parsed_args.token_file, "r", encoding="utf-8") as f:
