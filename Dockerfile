@@ -1,3 +1,23 @@
+# The server runs over stdio as UID 1000, with its config and saved session on a volume (a directory mounted there
+# instead must be writable by UID 1000):
+#
+#   docker build -t amazon-orders-mcp .
+#   docker run -i --rm -v amazon-orders:/home/app/.config/amazonorders amazon-orders-mcp
+#
+# To serve remote clients, listen on all of the container's interfaces, which requires a bearer token:
+#
+#   docker run -d -p 127.0.0.1:8000:8000 -e AMAZON_ORDERS_MCP_TOKEN \
+#       -v amazon-orders:/home/app/.config/amazonorders amazon-orders-mcp --transport streamable-http --host 0.0.0.0
+#
+# There's no display for `sign_in`, so sign in with `amazon-orders login` in a one-off container on the same volume.
+# The server picks up the new session on its next call:
+#
+#   docker build --target login -t amazon-orders-login .
+#   docker run -it --rm -v amazon-orders:/home/app/.config/amazonorders amazon-orders-login
+#
+# To sign in without being asked, pass `-e AMAZON_USERNAME -e AMAZON_PASSWORD -e AMAZON_OTP_SECRET_KEY` to that one-off
+# container (https://amazon-orders.readthedocs.io/#automating-authentication). Never pass them to the server's.
+
 FROM python:3.12-slim-trixie AS base
 
 ENV PYTHONUNBUFFERED=1

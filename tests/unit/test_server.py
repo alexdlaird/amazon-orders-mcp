@@ -245,7 +245,7 @@ class TestServer(UnitTestCase):
         # WHEN
         result = await self.call_tool("sign_in", {"site": "ebay.com"})
 
-        # THEN the site is checked first
+        # THEN
         self.assert_tool_error(result, "\"ebay.com\" isn't an Amazon site that can be read.")
 
     @patch("amazonorders_mcp.server.has_display", return_value=False)

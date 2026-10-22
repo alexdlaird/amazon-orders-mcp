@@ -231,7 +231,7 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
 
             command = HEADLESS_SIGN_IN_COMMAND
             if site != await anyio.to_thread.run_sync(session.site):
-                command = command.replace("amazon-orders ", f"amazon-orders --domain {site} ", 1)
+                command = f"amazon-orders --domain {site} login"
             raise ToolError("There's no display where the server runs, so it can't open a browser window for the "
                             f"user to sign in. Instead, they can sign in there with `{command}`, using the server's "
                             "config directory (for a server in a container, from a one-off container on the same "
@@ -653,10 +653,12 @@ def _parse_args(args: Optional[List[str]]) -> argparse.Namespace:
                                                  "transactions, built on amazon-orders.")
     parser.add_argument("--transport", choices=TRANSPORTS, default="stdio",
                         help="stdio (the default) for a client that runs the server, or streamable-http to serve "
-                             "clients that connect to it over HTTP.")
+                             f"clients that connect to it over HTTP, at /mcp. GET {HEALTH_PATH} answers ok, without "
+                             "calling Amazon, for health checks.")
     parser.add_argument("--host", default=DEFAULT_HOST,
                         help=f"The address to listen on over HTTP (default: {DEFAULT_HOST}, which only this machine "
-                             "can reach).")
+                             "can reach). On a loopback address, only requests whose Host is a loopback address are "
+                             "accepted, so a proxy on this machine must pass one.")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
                         help=f"The port to listen on over HTTP (default: {DEFAULT_PORT}).")
     parser.add_argument("--json-response", action="store_true",
