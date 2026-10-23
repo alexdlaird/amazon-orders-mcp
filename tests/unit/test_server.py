@@ -1,12 +1,17 @@
 __copyright__ = "Copyright (c) 2026 Alex Laird"
 __license__ = "MIT"
 
+import inspect
 import os
 from unittest.mock import ANY, patch
 
 import responses
 from amazonorders.exception import AmazonOrdersAuthRedirectError, AmazonOrdersError, AmazonOrdersUnavailableError
+from amazonorders.gift_cards import AmazonGiftCards
+from amazonorders.orders import AmazonOrders
 from amazonorders.paging import PagedResults
+from amazonorders.prime import AmazonPrime
+from amazonorders.transactions import AmazonTransactions
 from mcp.client import Client
 
 from amazonorders_mcp.schema import SCHEMA
@@ -72,6 +77,33 @@ class TestServer(UnitTestCase):
             self.assertEqual(tool_schema["output_schema"], tool.output_schema)
             for parameter, description in tool_schema["parameters"].items():
                 self.assertEqual(description, tool.input_schema["properties"][parameter]["description"])
+
+    async def test_tool_parameters_exist_on_core_calls(self):
+        # GIVEN
+        server = create_server(self.saved_session)
+        core_calls = {
+            "get_order_history": AmazonOrders.get_order_history_page,
+            "get_order": AmazonOrders.get_order,
+            "search_orders": AmazonOrders.search_orders_page,
+            "get_tracking": AmazonOrders.get_tracking,
+            "get_invoice_pdfs": AmazonOrders.get_invoice_pdfs,
+            "get_family_members": AmazonOrders.get_family_members,
+            "get_transactions": AmazonTransactions.get_transactions_page,
+            "get_gift_card_activity": AmazonGiftCards.get_gift_card_activity,
+            "get_gift_card_balance": AmazonGiftCards.get_balance,
+            "get_prime_payments": AmazonPrime.get_prime_payments,
+        }
+
+        # WHEN
+        async with Client(server) as client:
+            tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+
+        # THEN
+        for name, core_call in core_calls.items():
+            tool_parameters = set(tools[name].input_schema["properties"]) - {"site"}
+            core_parameters = set(inspect.signature(core_call).parameters)
+            self.assertLessEqual(tool_parameters, core_parameters,
+                                 f"{name} takes parameters {core_call.__qualname__} doesn't")
 
     async def test_check_session_without_saved_session(self):
         # WHEN
