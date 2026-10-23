@@ -8,7 +8,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
-- A `search_orders` tool, to find orders by product title, order number, address or recipient across every year, as the search box on Your Orders does. It returns a batch of matching items at a time with a `cursor`, like `get_order_history`.
+- A `search_orders` tool, to find orders by product, order number, address or recipient.
 
 ## [1.4.2](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.4.1...1.4.2) - 2026-10-21
 
