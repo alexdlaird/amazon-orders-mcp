@@ -67,6 +67,10 @@ class OrderDetails(ToolOutput):
     tool = "get_order"
 
 
+class OrderSearchPage(ToolOutput):
+    tool = "search_orders"
+
+
 class InvoicePdfList(ToolOutput):
     tool = "get_invoice_pdfs"
 

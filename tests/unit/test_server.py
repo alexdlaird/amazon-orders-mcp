@@ -1,12 +1,17 @@
 __copyright__ = "Copyright (c) 2026 Alex Laird"
 __license__ = "MIT"
 
+import inspect
 import os
 from unittest.mock import ANY, patch
 
 import responses
 from amazonorders.exception import AmazonOrdersAuthRedirectError, AmazonOrdersError, AmazonOrdersUnavailableError
+from amazonorders.gift_cards import AmazonGiftCards
+from amazonorders.orders import AmazonOrders
 from amazonorders.paging import PagedResults
+from amazonorders.prime import AmazonPrime
+from amazonorders.transactions import AmazonTransactions
 from mcp.client import Client
 
 from amazonorders_mcp.schema import SCHEMA
@@ -29,8 +34,8 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertEqual({"check_session", "sign_in", "get_config", "update_config", "get_order_history", "get_order",
-                          "get_family_members", "get_tracking", "get_invoice_pdfs", "get_transactions",
-                          "get_gift_card_activity", "get_gift_card_balance", "get_prime_payments"},
+                          "search_orders", "get_family_members", "get_tracking", "get_invoice_pdfs",
+                          "get_transactions", "get_gift_card_activity", "get_gift_card_balance", "get_prime_payments"},
                          {tool.name for tool in tools})
         for tool in tools:
             if tool.name in ("sign_in", "update_config"):
@@ -62,8 +67,9 @@ class TestServer(UnitTestCase):
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
 
         # THEN
-        self.assertEqual({"get_order_history", "get_family_members", "get_order", "get_tracking", "get_invoice_pdfs",
-                          "get_transactions", "get_gift_card_activity", "get_prime_payments"}, set(SCHEMA["tools"]))
+        self.assertEqual({"get_order_history", "get_family_members", "get_order", "search_orders", "get_tracking",
+                          "get_invoice_pdfs", "get_transactions", "get_gift_card_activity", "get_prime_payments"},
+                         set(SCHEMA["tools"]))
         for name, tool_schema in SCHEMA["tools"].items():
             tool = tools[name]
             self.assertTrue(tool_schema["output_schema"]["properties"], f"{name} has an empty output schema")
@@ -71,6 +77,33 @@ class TestServer(UnitTestCase):
             self.assertEqual(tool_schema["output_schema"], tool.output_schema)
             for parameter, description in tool_schema["parameters"].items():
                 self.assertEqual(description, tool.input_schema["properties"][parameter]["description"])
+
+    async def test_tool_parameters_exist_on_core_calls(self):
+        # GIVEN
+        server = create_server(self.saved_session)
+        core_calls = {
+            "get_order_history": AmazonOrders.get_order_history_page,
+            "get_order": AmazonOrders.get_order,
+            "search_orders": AmazonOrders.search_orders_page,
+            "get_tracking": AmazonOrders.get_tracking,
+            "get_invoice_pdfs": AmazonOrders.get_invoice_pdfs,
+            "get_family_members": AmazonOrders.get_family_members,
+            "get_transactions": AmazonTransactions.get_transactions_page,
+            "get_gift_card_activity": AmazonGiftCards.get_gift_card_activity,
+            "get_gift_card_balance": AmazonGiftCards.get_balance,
+            "get_prime_payments": AmazonPrime.get_prime_payments,
+        }
+
+        # WHEN
+        async with Client(server) as client:
+            tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+
+        # THEN
+        for name, core_call in core_calls.items():
+            tool_parameters = set(tools[name].input_schema["properties"]) - {"site"}
+            core_parameters = set(inspect.signature(core_call).parameters)
+            self.assertLessEqual(tool_parameters, core_parameters,
+                                 f"{name} takes parameters {core_call.__qualname__} doesn't")
 
     async def test_check_session_without_saved_session(self):
         # WHEN
@@ -245,7 +278,7 @@ class TestServer(UnitTestCase):
         # WHEN
         result = await self.call_tool("sign_in", {"site": "ebay.com"})
 
-        # THEN the site is checked first
+        # THEN
         self.assert_tool_error(result, "\"ebay.com\" isn't an Amazon site that can be read.")
 
     @patch("amazonorders_mcp.server.has_display", return_value=False)
@@ -408,6 +441,41 @@ class TestServer(UnitTestCase):
         self.assertFalse(result.is_error)
         self.assertEqual({"order_number": "112-0000000-0000001"}, result.structured_content)
         mock_amazon_orders.return_value.get_order.assert_called_once_with("112-0000000-0000001")
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_search_orders(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        next_page = {"next_page": "https://www.amazon.com/your-orders/search?page=2&search=example"}
+        mock_amazon_orders.return_value.search_orders_page.return_value = PagedResults(
+            self.given_entities({"order_number": "112-0000000-0000001", "item": {"title": "Example Item"}}),
+            next_page)
+
+        # WHEN
+        result = await self.call_tool("search_orders", {"query": "example"})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual({"items": [{"order_number": "112-0000000-0000001", "item": {"title": "Example Item"}}],
+                          "cursor": next_page, "has_more": True}, result.structured_content)
+        mock_amazon_orders.return_value.search_orders_page.assert_called_once_with(
+            query="example", limit=DEFAULT_LIMIT, cursor=None, progress=ANY)
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_search_orders_next_batch(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        next_page = {"next_page": "https://www.amazon.com/your-orders/search?page=2&search=example"}
+        mock_amazon_orders.return_value.search_orders_page.return_value = PagedResults([], None)
+
+        # WHEN
+        result = await self.call_tool("search_orders", {"query": "example", "limit": 5, "cursor": next_page})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual({"items": [], "cursor": None, "has_more": False}, result.structured_content)
+        mock_amazon_orders.return_value.search_orders_page.assert_called_once_with(
+            query="example", limit=5, cursor=next_page, progress=ANY)
 
     @patch("amazonorders_mcp.server.AmazonTransactions")
     async def test_get_transactions(self, mock_amazon_transactions):

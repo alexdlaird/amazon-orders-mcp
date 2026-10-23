@@ -15,6 +15,7 @@ from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.gift_card_activity import GiftCardActivity
 from amazonorders.entity.invoice_pdf import InvoicePdf
 from amazonorders.entity.order import Order
+from amazonorders.entity.order_search_result import OrderSearchResult
 from amazonorders.entity.prime_payment import PrimePayment
 from amazonorders.entity.tracking import Tracking
 from amazonorders.entity.transaction import Transaction
@@ -43,6 +44,7 @@ from amazonorders_mcp.schema import (
     InvoicePdfList,
     OrderDetails,
     OrderHistoryPage,
+    OrderSearchPage,
     PrimePaymentList,
     TrackingDetails,
     TransactionsPage,
@@ -64,6 +66,8 @@ INSTRUCTIONS = (
     "activity, and Prime membership payments. The links from `get_invoice_pdfs` change on every call and may only "
     "open in a browser signed in to the user's Amazon account, so give them to the user right away rather than "
     "keeping them. "
+    "To find an order by what was bought, its number, or who it went to, use `search_orders` rather than paging "
+    "through `get_order_history`. "
     "For the orders of an Amazon Household member, like a linked Teen account, get their `id` from "
     "`get_family_members` and pass it to `get_order_history` as `family_member_id`. "
     "Each Amazon site, like amazon.com or amazon.de, has its own orders and its own sign-in. Tools read the user's "
@@ -231,7 +235,7 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
 
             command = HEADLESS_SIGN_IN_COMMAND
             if site != await anyio.to_thread.run_sync(session.site):
-                command = command.replace("amazon-orders ", f"amazon-orders --domain {site} ", 1)
+                command = f"amazon-orders --domain {site} login"
             raise ToolError("There's no display where the server runs, so it can't open a browser window for the "
                             f"user to sign in. Instead, they can sign in there with `{command}`, using the server's "
                             "config directory (for a server in a container, from a one-off container on the same "
@@ -305,6 +309,27 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         order = await run(get, site)
 
         return OrderDetails.model_validate(order.to_dict(exclude_none=True))
+
+    @server.tool(annotations=READ_ONLY,
+                 description=tool_description("search_orders"))
+    async def search_orders(
+            ctx: Context,
+            query: Annotated[str, parameter_field("search_orders", "query")],
+            limit: Annotated[Optional[int], parameter_field("search_orders", "limit")] = DEFAULT_LIMIT,
+            cursor: Annotated[Optional[Dict[str, Any]], parameter_field("search_orders", "cursor")] = None,
+            site: Annotated[Optional[str], SITE] = None
+    ) -> OrderSearchPage:
+        progress = _progress_reporter(ctx, "matching Items")
+
+        def get(amazon_session: AmazonSession) -> PagedResults[OrderSearchResult]:
+            return AmazonOrders(amazon_session).search_orders_page(query=query,
+                                                                   limit=limit,
+                                                                   cursor=cursor,
+                                                                   progress=progress)
+
+        page = await run(get, site)
+
+        return OrderSearchPage.model_validate(page.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_tracking"))
@@ -653,10 +678,12 @@ def _parse_args(args: Optional[List[str]]) -> argparse.Namespace:
                                                  "transactions, built on amazon-orders.")
     parser.add_argument("--transport", choices=TRANSPORTS, default="stdio",
                         help="stdio (the default) for a client that runs the server, or streamable-http to serve "
-                             "clients that connect to it over HTTP.")
+                             f"clients that connect to it over HTTP, at /mcp. GET {HEALTH_PATH} answers ok, without "
+                             "calling Amazon, for health checks.")
     parser.add_argument("--host", default=DEFAULT_HOST,
                         help=f"The address to listen on over HTTP (default: {DEFAULT_HOST}, which only this machine "
-                             "can reach).")
+                             "can reach). On a loopback address, only requests whose Host is a loopback address are "
+                             "accepted, so a proxy on this machine must pass one.")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
                         help=f"The port to listen on over HTTP (default: {DEFAULT_PORT}).")
     parser.add_argument("--json-response", action="store_true",
