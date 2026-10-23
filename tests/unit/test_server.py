@@ -177,7 +177,7 @@ class TestServer(UnitTestCase):
                      "error": None}
         signed_out = {"signed_in": False, "site": "https://www.amazon.de", "default": False,
                       "sign_in": "Offer to sign the user in with `sign_in` and `site` set to `amazon.de`, or they "
-                                 "can run `amazon-orders --domain amazon.de login --browser` in a terminal.",
+                                 "can run `uvx amazon-orders --domain amazon.de login --browser` in a terminal.",
                       "error": None}
         self.assertEqual({**signed_in, "sites": [signed_in, signed_out]}, result.structured_content)
 
@@ -288,7 +288,7 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assert_tool_error(result, "There's no display where the server runs",
-                               "`amazon-orders --domain amazon.de login`")
+                               "`uvx amazon-orders --domain amazon.de login`")
         mock_browser_login.assert_not_called()
 
     @patch("amazonorders_mcp.server.has_display", return_value=False)
@@ -393,7 +393,7 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assert_tool_error(result, "There's no saved Amazon session.", "`site` set to `amazon.es`",
-                               "`amazon-orders --domain amazon.es login --browser`")
+                               "`uvx amazon-orders --domain amazon.es login --browser`")
 
     async def test_get_order_on_unknown_site(self):
         # WHEN

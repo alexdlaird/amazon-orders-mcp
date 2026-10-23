@@ -21,10 +21,10 @@ from amazonorders.util import to_type
 logger = logging.getLogger(__name__)
 
 #: The command that signs in from a terminal, for a client that can't use the ``sign_in`` tool.
-SIGN_IN_COMMAND = "amazon-orders login --browser"
+SIGN_IN_COMMAND = "uvx amazon-orders login --browser"
 
 #: The command that signs in without a browser window, with the user's credentials, where there's no display.
-HEADLESS_SIGN_IN_COMMAND = "amazon-orders login"
+HEADLESS_SIGN_IN_COMMAND = "uvx amazon-orders login"
 
 #: What a sign-in reports while it waits for the user.
 WAITING_TO_SIGN_IN_STATUS = "Waiting for the user to sign in to Amazon ..."
@@ -72,7 +72,7 @@ class SavedSession:
     Each Amazon site, like amazon.com or amazon.de, has its own orders and its own sign-in, so each has its own
     session, made when it's first used. The default site is the config's ``domain``, and another site's session has
     the same config, but for that site. ``amazon-orders`` keeps each site's session in its own cookie jar (e.g.
-    ``cookies.amazon.de.json``), so ``amazon-orders --domain amazon.de login`` signs in to a site from a terminal.
+    ``cookies.amazon.de.json``), so ``uvx amazon-orders --domain amazon.de login`` signs in to a site from a terminal.
 
     Calls to a site are serialized, since an :class:`~amazonorders.session.AmazonSession` isn't made for concurrent
     use, but calls to different sites can run at the same time, since their sessions share nothing. After Amazon

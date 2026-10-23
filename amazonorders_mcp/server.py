@@ -226,7 +226,7 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
 
             command = HEADLESS_SIGN_IN_COMMAND
             if site != await anyio.to_thread.run_sync(session.site):
-                command = f"amazon-orders --domain {site} login"
+                command = f"uvx amazon-orders --domain {site} login"
             raise ToolError("There's no display where the server runs, so it can't open a browser window for the "
                             f"user to sign in. Instead, they can sign in there with `{command}`, using the server's "
                             "config directory (for a server in a container, from a one-off container on the same "
@@ -605,7 +605,7 @@ def _sign_in_advice(session: SavedSession,
         return f"Offer to sign the user in with `sign_in`, or they can run `{SIGN_IN_COMMAND}` in a terminal"
 
     return (f"Offer to sign the user in with `sign_in` and `site` set to `{site}`, or they can run "
-            f"`amazon-orders --domain {site} login --browser` in a terminal")
+            f"`uvx amazon-orders --domain {site} login --browser` in a terminal")
 
 
 async def _report_signing_in(ctx: Context,

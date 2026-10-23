@@ -12,9 +12,8 @@ and transactions, built on [`amazon-orders`](https://github.com/alexdlaird/amazo
 tools for your Amazon account, available from Claude and any other MCP client.
 
 The server never sees your credentials. When you sign in, a browser window opens on Amazon's own page, and the server
-reuses the session that leaves behind. Signing in needs a display, so run the server on the machine you sign in on. On a
-machine without one, like a server or a container, sign in with
-[`amazon-orders login`](https://github.com/alexdlaird/amazon-orders) instead.
+reuses the session that leaves behind. It also runs on a server without a display, where you sign in from a terminal
+instead (see [Remote Clients](#remote-clients)).
 
 > **Note:** This server reads its data through `amazon-orders`, which works by parsing data from Amazon's
 > consumer-facing website. As Amazon provides no official API to use, older versions may break at any time, so it's
@@ -73,7 +72,8 @@ uvx amazon-orders-mcp --transport streamable-http
 ```
 
 It listens at `http://127.0.0.1:8000/mcp`. See `--help` to change that, or to require a bearer token (required off
-loopback).
+loopback). On a server without a display, `sign_in` can't open a browser window, so sign in there first with
+`uvx amazon-orders login`, which asks for your username and password instead.
 
 ### Docker
 
