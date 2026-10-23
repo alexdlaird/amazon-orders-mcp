@@ -88,22 +88,21 @@ A container has no display, so sign in with the `login` target first. See the `D
 
 Just ask your assistant about your orders, and it will use the following tools:
 
-| Tool                     | Returns                                                                    |
-|--------------------------|----------------------------------------------------------------------------|
-| `sign_in`                | Opens a browser window for you to sign in to Amazon, when you ask          |
-| `get_order_history`      | A batch of orders by year, time filter or order type, optionally detailed  |
-| `get_order`              | One order, by order number                                                 |
-| `search_orders`          | A batch of items by product, order number, address or recipient, any year  |
-| `get_tracking`           | A shipment's carrier and tracking number, from an order's shipment ID      |
-| `get_invoice_pdfs`       | An order's invoice and credit note PDFs, where the seller issues them      |
-| `get_transactions`       | A batch of payment transactions over a number of days, or for an order     |
-| `get_gift_card_balance`  | The current Gift Card balance                                              |
-| `get_gift_card_activity` | Gift Card activity over a number of days                                   |
-| `get_prime_payments`     | Prime membership fee charges, each with its order number                   |
-| `get_family_members`     | Amazon Household members whose orders you can view, like Teen accounts     |
-| `get_config`             | The settings your assistant can change, and their values                   |
-| `update_config`          | Changes a setting, like the default Amazon site (e.g. `amazon.co.uk`)      |
-| `check_session`          | Whether you're signed in, on each Amazon site you have a session for       |
+| Tool                 | Returns                                                                   |
+|----------------------|---------------------------------------------------------------------------|
+| `sign_in`            | Opens a browser window for you to sign in to Amazon, when you ask         |
+| `get_orders`         | A batch of orders by year, time filter or order type, optionally detailed |
+| `search_orders`      | A batch of items by product, order number, address or recipient, any year |
+| `get_order`          | One order, by order number                                                |
+| `get_tracking`       | A shipment's carrier and tracking number, from an order's shipment ID     |
+| `get_invoices`       | An order's printable summary, and any invoice PDFs the seller issues      |
+| `get_family_members` | Amazon Household members whose orders you can view, like Teen accounts    |
+| `get_transactions`   | A batch of payment transactions over a number of days, or for an order    |
+| `get_gift_cards`     | The Gift Card balance, with a batch of its activity over a number of days |
+| `get_prime_payments` | Prime membership fee charges, each with its order number                  |
+| `check_session`      | Whether you're signed in, on each Amazon site you have a session for      |
+| `get_config`         | The settings your assistant can change, and their values                  |
+| `update_config`      | Changes one of those settings                                             |
 
 Order history and transactions come back in batches of `limit` results (25 by default, and a batch can run up to a
 page over), with a `cursor` your assistant passes back to get the next batch.

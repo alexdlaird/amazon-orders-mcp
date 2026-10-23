@@ -6,6 +6,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.5.0...HEAD)
 
+### Changed
+
+- **Breaking:** `get_order_history` is now `get_orders`, to match `amazon-orders` 4.12.
+- **Breaking:** `get_invoice_pdfs` is now `get_invoices`, which also lists an order's printable summary, so it returns an invoice on every Amazon site.
+- **Breaking:** `get_gift_card_balance` and `get_gift_card_activity` are now `get_gift_cards`, which returns the balance with a batch of activity and a `cursor`, like `get_transactions`.
+
 ## [1.5.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/1.4.2...1.5.0) - 2026-10-23
 
 ### Added

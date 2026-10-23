@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type
 import docstring_parser
 from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.gift_card_activity import GiftCardActivity
-from amazonorders.entity.invoice_pdf import InvoicePdf
+from amazonorders.entity.invoice import Invoice
 from amazonorders.entity.item import Item
 from amazonorders.entity.order import Order
 from amazonorders.entity.order_search_result import OrderSearchResult
@@ -23,7 +23,7 @@ from amazonorders.entity.seller import Seller
 from amazonorders.entity.shipment import Shipment
 from amazonorders.entity.tracking import Tracking
 from amazonorders.entity.transaction import Transaction
-from amazonorders.gift_cards import AmazonGiftCards
+from amazonorders.gift_cards import AmazonGiftCards, GiftCards
 from amazonorders.orders import AmazonOrders
 from amazonorders.paging import PagedResults
 from amazonorders.prime import AmazonPrime
@@ -36,7 +36,7 @@ SCHEMA_COMMENT = ("AUTO-GENERATED — DO NOT EDIT. Generated from the installed 
                   "docs, via: scripts/generate-schema.py (make schema)")
 
 ENTITIES: List[Type[Parsable]] = [Order, Shipment, Item, Seller, Recipient, Tracking, Transaction, GiftCardActivity,
-                                  FamilyMember, InvoicePdf, PrimePayment, OrderSearchResult]
+                                  FamilyMember, Invoice, PrimePayment, OrderSearchResult]
 
 PRIMITIVE_SCHEMAS = {
     "bool": {"type": "boolean"},
@@ -70,24 +70,28 @@ class Tool(NamedTuple):
     output: str
     #: Parameters whose text comes from another core method, where ``call``'s defers to it.
     parameter_calls: Optional[Dict[str, Callable[..., Any]]] = None
+    #: For a ``"page"``, the :class:`~amazonorders.paging.PagedResults` the call returns, whose own field docs add to
+    #: the output schema.
+    page: Type[PagedResults] = PagedResults
 
 
 TOOLS = [
-    Tool("get_order_history", AmazonOrders.get_order_history_page,
+    Tool("get_orders", AmazonOrders.get_orders_page,
          ["year", "time_filter", "order_filter", "family_member_id", "start_index", "full_details", "limit", "cursor"],
          Order, "page",
-         parameter_calls={"time_filter": AmazonOrders.get_order_history,
-                          "order_filter": AmazonOrders.get_order_history,
-                          "family_member_id": AmazonOrders.get_order_history}),
+         parameter_calls={"time_filter": AmazonOrders.get_orders,
+                          "order_filter": AmazonOrders.get_orders,
+                          "family_member_id": AmazonOrders.get_orders}),
     Tool("get_order", AmazonOrders.get_order, ["order_id"], Order, "entity"),
     Tool("get_tracking", AmazonOrders.get_tracking, ["order_id", "shipment_id"], Tracking, "entity"),
     Tool("search_orders", AmazonOrders.search_orders, ["query", "limit", "cursor"], OrderSearchResult, "page",
          parameter_calls={"limit": AmazonOrders.search_orders_page,
                           "cursor": AmazonOrders.search_orders_page}),
-    Tool("get_invoice_pdfs", AmazonOrders.get_invoice_pdfs, ["order_id"], InvoicePdf, "list"),
+    Tool("get_invoices", AmazonOrders.get_invoices, ["order_id"], Invoice, "list"),
     Tool("get_transactions", AmazonTransactions.get_transactions_page, ["days", "order_id", "limit", "cursor"],
          Transaction, "page"),
-    Tool("get_gift_card_activity", AmazonGiftCards.get_gift_card_activity, ["days"], GiftCardActivity, "list"),
+    Tool("get_gift_cards", AmazonGiftCards.get_gift_cards_page, ["days", "limit", "cursor"], GiftCardActivity, "page",
+         page=GiftCards),
     Tool("get_prime_payments", AmazonPrime.get_prime_payments, [], PrimePayment, "list"),
     Tool("get_family_members", AmazonOrders.get_family_members, [], FamilyMember, "list"),
 ]
@@ -181,10 +185,13 @@ def _output_schema(tool: Tool,
         }
 
     paging_fields = _attribute_docs(PagedResults.__module__)[PagedResults.__name__]
+    page_fields = {} if tool.page is PagedResults else _attribute_docs(tool.page.__module__)[tool.page.__name__]
     return {
         "type": "object",
         "description": description,
         "properties": {
+            **{field: {**_annotation_schema(field_doc["annotation"]), "description": field_doc["description"]}
+               for field, field_doc in page_fields.items()},
             "items": {**items_schema, "description": paging_fields["items"]["description"]},
             "cursor": {"type": ["object", "null"], "description": paging_fields["cursor"]["description"]},
             "has_more": {"type": "boolean",

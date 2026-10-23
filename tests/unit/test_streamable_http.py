@@ -101,7 +101,7 @@ class TestStreamableHttp(UnitTestCase):
                 result = await client.call_tool("check_session", {})
 
         # THEN
-        self.assertIn("get_order_history", {tool.name for tool in tools})
+        self.assertIn("get_orders", {tool.name for tool in tools})
         self.assertFalse(result.is_error)
         self.assertFalse(result.structured_content["signed_in"])
 
@@ -110,11 +110,11 @@ class TestStreamableHttp(UnitTestCase):
         # GIVEN
         self.given_saved_session()
 
-        def get_order_history_page(**kwargs):
+        def get_orders_page(**kwargs):
             kwargs["progress_with_total"](10, 12)
             return PagedResults([], None)
 
-        mock_amazon_orders.return_value.get_order_history_page.side_effect = get_order_history_page
+        mock_amazon_orders.return_value.get_orders_page.side_effect = get_orders_page
         reported = []
 
         async def progress_callback(progress, total, message):
@@ -123,7 +123,7 @@ class TestStreamableHttp(UnitTestCase):
         async with self.given_http_client() as http_client:
             # WHEN
             async with self.given_client(http_client) as client:
-                result = await client.call_tool("get_order_history", {}, progress_callback=progress_callback)
+                result = await client.call_tool("get_orders", {}, progress_callback=progress_callback)
 
         # THEN
         self.assertFalse(result.is_error)
@@ -134,11 +134,11 @@ class TestStreamableHttp(UnitTestCase):
         # GIVEN
         self.given_saved_session()
 
-        def get_order_history_page(**kwargs):
+        def get_orders_page(**kwargs):
             kwargs["progress_with_total"](10, 12)
             return PagedResults([], None)
 
-        mock_amazon_orders.return_value.get_order_history_page.side_effect = get_order_history_page
+        mock_amazon_orders.return_value.get_orders_page.side_effect = get_orders_page
         reported = []
 
         async def progress_callback(progress, total, message):
@@ -148,7 +148,7 @@ class TestStreamableHttp(UnitTestCase):
             # WHEN
             response = await http_client.post("/mcp", json=LIST_TOOLS_REQUEST, headers=MCP_HEADERS)
             async with self.given_client(http_client) as client:
-                result = await client.call_tool("get_order_history", {}, progress_callback=progress_callback)
+                result = await client.call_tool("get_orders", {}, progress_callback=progress_callback)
 
         # THEN
         self.assertEqual(200, response.status_code)

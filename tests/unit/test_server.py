@@ -7,7 +7,7 @@ from unittest.mock import ANY, patch
 
 import responses
 from amazonorders.exception import AmazonOrdersAuthRedirectError, AmazonOrdersError, AmazonOrdersUnavailableError
-from amazonorders.gift_cards import AmazonGiftCards
+from amazonorders.gift_cards import AmazonGiftCards, GiftCards
 from amazonorders.orders import AmazonOrders
 from amazonorders.paging import PagedResults
 from amazonorders.prime import AmazonPrime
@@ -33,9 +33,9 @@ class TestServer(UnitTestCase):
             tools = (await client.list_tools()).tools
 
         # THEN
-        self.assertEqual({"check_session", "sign_in", "get_config", "update_config", "get_order_history", "get_order",
-                          "search_orders", "get_family_members", "get_tracking", "get_invoice_pdfs",
-                          "get_transactions", "get_gift_card_activity", "get_gift_card_balance", "get_prime_payments"},
+        self.assertEqual({"check_session", "sign_in", "get_config", "update_config", "get_orders", "get_order",
+                          "search_orders", "get_family_members", "get_tracking", "get_invoices", "get_transactions",
+                          "get_gift_cards", "get_prime_payments"},
                          {tool.name for tool in tools})
         for tool in tools:
             if tool.name in ("sign_in", "update_config"):
@@ -67,8 +67,8 @@ class TestServer(UnitTestCase):
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
 
         # THEN
-        self.assertEqual({"get_order_history", "get_family_members", "get_order", "search_orders", "get_tracking",
-                          "get_invoice_pdfs", "get_transactions", "get_gift_card_activity", "get_prime_payments"},
+        self.assertEqual({"get_orders", "get_family_members", "get_order", "search_orders", "get_tracking",
+                          "get_invoices", "get_transactions", "get_gift_cards", "get_prime_payments"},
                          set(SCHEMA["tools"]))
         for name, tool_schema in SCHEMA["tools"].items():
             tool = tools[name]
@@ -82,15 +82,14 @@ class TestServer(UnitTestCase):
         # GIVEN
         server = create_server(self.saved_session)
         core_calls = {
-            "get_order_history": AmazonOrders.get_order_history_page,
+            "get_orders": AmazonOrders.get_orders_page,
             "get_order": AmazonOrders.get_order,
             "search_orders": AmazonOrders.search_orders_page,
             "get_tracking": AmazonOrders.get_tracking,
-            "get_invoice_pdfs": AmazonOrders.get_invoice_pdfs,
+            "get_invoices": AmazonOrders.get_invoices,
             "get_family_members": AmazonOrders.get_family_members,
             "get_transactions": AmazonTransactions.get_transactions_page,
-            "get_gift_card_activity": AmazonGiftCards.get_gift_card_activity,
-            "get_gift_card_balance": AmazonGiftCards.get_balance,
+            "get_gift_cards": AmazonGiftCards.get_gift_cards_page,
             "get_prime_payments": AmazonPrime.get_prime_payments,
         }
 
@@ -304,23 +303,23 @@ class TestServer(UnitTestCase):
         mock_browser_login.assert_not_called()
         self.assertFalse(os.path.exists(self.test_config.config_path))
 
-    async def test_get_order_history_without_saved_session(self):
+    async def test_get_orders_without_saved_session(self):
         # WHEN
-        result = await self.call_tool("get_order_history")
+        result = await self.call_tool("get_orders")
 
         # THEN
         self.assert_tool_error(result, "There's no saved Amazon session.", SIGN_IN_COMMAND)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
-    async def test_get_order_history(self, mock_amazon_orders):
+    async def test_get_orders(self, mock_amazon_orders):
         # GIVEN
         self.given_saved_session()
-        mock_amazon_orders.return_value.get_order_history_page.return_value = PagedResults(
+        mock_amazon_orders.return_value.get_orders_page.return_value = PagedResults(
             self.given_entities({"order_number": "112-0000000-0000001"}, {"order_number": "112-0000000-0000002"}),
             {"start_index": 10, "time_filter": "last30", "order_filter": None})
 
         # WHEN
-        result = await self.call_tool("get_order_history", {"time_filter": "last30", "full_details": True})
+        result = await self.call_tool("get_orders", {"time_filter": "last30", "full_details": True})
 
         # THEN
         self.assertFalse(result.is_error)
@@ -328,38 +327,38 @@ class TestServer(UnitTestCase):
                                     {"order_number": "112-0000000-0000002"}],
                           "cursor": {"start_index": 10, "time_filter": "last30", "order_filter": None},
                           "has_more": True}, result.structured_content)
-        mock_amazon_orders.return_value.get_order_history_page.assert_called_once_with(
+        mock_amazon_orders.return_value.get_orders_page.assert_called_once_with(
             year=None, start_index=None, full_details=True, time_filter="last30", order_filter=None,
             family_member_id=None, limit=DEFAULT_LIMIT, cursor=None, progress_with_total=ANY)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
-    async def test_get_order_history_from_cursor(self, mock_amazon_orders):
+    async def test_get_orders_from_cursor(self, mock_amazon_orders):
         # GIVEN
         self.given_saved_session()
         cursor = {"start_index": 10, "time_filter": "year-2026", "order_filter": None}
-        mock_amazon_orders.return_value.get_order_history_page.return_value = PagedResults(
+        mock_amazon_orders.return_value.get_orders_page.return_value = PagedResults(
             self.given_entities({"order_number": "112-0000000-0000011"}), None)
 
         # WHEN
-        result = await self.call_tool("get_order_history", {"cursor": cursor, "limit": None})
+        result = await self.call_tool("get_orders", {"cursor": cursor, "limit": None})
 
         # THEN
         self.assertFalse(result.is_error)
         self.assertEqual({"items": [{"order_number": "112-0000000-0000011"}], "cursor": None, "has_more": False},
                          result.structured_content)
-        mock_amazon_orders.return_value.get_order_history_page.assert_called_once_with(
+        mock_amazon_orders.return_value.get_orders_page.assert_called_once_with(
             year=None, start_index=None, full_details=False, time_filter=None, order_filter=None,
             family_member_id=None, limit=None, cursor=cursor, progress_with_total=ANY)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
-    async def test_get_order_history_on_site(self, mock_amazon_orders):
+    async def test_get_orders_on_site(self, mock_amazon_orders):
         # GIVEN
         self.given_saved_session("amazon.com", "amazon.de")
-        mock_amazon_orders.return_value.get_order_history_page.return_value = PagedResults(
+        mock_amazon_orders.return_value.get_orders_page.return_value = PagedResults(
             self.given_entities({"order_number": "302-0000000-0000001"}), None)
 
         # WHEN
-        result = await self.call_tool("get_order_history", {"site": "amazon.de", "limit": 1})
+        result = await self.call_tool("get_orders", {"site": "amazon.de", "limit": 1})
 
         # THEN
         self.assertFalse(result.is_error)
@@ -371,13 +370,13 @@ class TestServer(UnitTestCase):
                          amazon_session.config.cookie_jar_path)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
-    async def test_get_order_history_on_default_site(self, mock_amazon_orders):
+    async def test_get_orders_on_default_site(self, mock_amazon_orders):
         # GIVEN
         self.given_saved_session("amazon.com", "amazon.de")
-        mock_amazon_orders.return_value.get_order_history_page.return_value = PagedResults([], None)
+        mock_amazon_orders.return_value.get_orders_page.return_value = PagedResults([], None)
 
         # WHEN
-        result = await self.call_tool("get_order_history")
+        result = await self.call_tool("get_orders")
 
         # THEN
         self.assertFalse(result.is_error)
@@ -404,23 +403,23 @@ class TestServer(UnitTestCase):
         self.assert_tool_error(result, "\"amazon.example\" isn't an Amazon site that can be read. Supported sites: ")
 
     @patch("amazonorders_mcp.server.AmazonOrders")
-    async def test_get_order_history_reports_progress(self, mock_amazon_orders):
+    async def test_get_orders_reports_progress(self, mock_amazon_orders):
         # GIVEN
         self.given_saved_session()
 
-        def get_order_history_page(**kwargs):
+        def get_orders_page(**kwargs):
             kwargs["progress_with_total"](10, 12)
             kwargs["progress_with_total"](12, 12)
             return PagedResults([], None)
 
-        mock_amazon_orders.return_value.get_order_history_page.side_effect = get_order_history_page
+        mock_amazon_orders.return_value.get_orders_page.side_effect = get_orders_page
         reported = []
 
         async def progress_callback(progress, total, message):
             reported.append((progress, total, message))
 
         # WHEN
-        result = await self.call_tool("get_order_history", progress_callback=progress_callback)
+        result = await self.call_tool("get_orders", progress_callback=progress_callback)
 
         # THEN
         self.assertFalse(result.is_error)
@@ -495,31 +494,33 @@ class TestServer(UnitTestCase):
             days=30, order_id=None, limit=DEFAULT_LIMIT, cursor=None, progress=ANY)
 
     @patch("amazonorders_mcp.server.AmazonGiftCards")
-    async def test_get_gift_card_activity(self, mock_amazon_gift_cards):
+    async def test_get_gift_cards(self, mock_amazon_gift_cards):
         # GIVEN
         self.given_saved_session()
-        mock_amazon_gift_cards.return_value.get_gift_card_activity.return_value = self.given_entities(
-            {"amount": 25.0})
+        next_page = {"next_page_url": "https://www.amazon.com/gc/balance?next=2", "min_date": "2025-10-23"}
+        mock_amazon_gift_cards.return_value.get_gift_cards_page.return_value = GiftCards(
+            self.given_entities({"amount": 25.0}), next_page, 12.5)
 
         # WHEN
-        result = await self.call_tool("get_gift_card_activity")
+        result = await self.call_tool("get_gift_cards")
 
         # THEN
         self.assertFalse(result.is_error)
-        self.assertEqual({"items": [{"amount": 25.0}]}, result.structured_content)
-        mock_amazon_gift_cards.return_value.get_gift_card_activity.assert_called_once_with(days=365,
-                                                                                           progress=ANY)
+        self.assertEqual({"balance": 12.5, "items": [{"amount": 25.0}], "cursor": next_page, "has_more": True},
+                         result.structured_content)
+        mock_amazon_gift_cards.return_value.get_gift_cards_page.assert_called_once_with(
+            days=365, limit=DEFAULT_LIMIT, cursor=None, progress=ANY)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_expired_session_says_to_sign_in_and_is_rechecked(self, mock_amazon_orders):
         # GIVEN
         mock_login = self.given_saved_session()
-        mock_amazon_orders.return_value.get_order_history_page.side_effect = [
+        mock_amazon_orders.return_value.get_orders_page.side_effect = [
             AmazonOrdersAuthRedirectError("Amazon redirected to sign-in."), PagedResults([], None)]
 
         # WHEN
-        expired_result = await self.call_tool("get_order_history")
-        retried_result = await self.call_tool("get_order_history")
+        expired_result = await self.call_tool("get_orders")
+        retried_result = await self.call_tool("get_orders")
 
         # THEN
         self.assert_tool_error(expired_result, "Amazon redirected to sign-in.", SIGN_IN_COMMAND)
@@ -530,11 +531,11 @@ class TestServer(UnitTestCase):
     async def test_error_context_is_passed_back(self, mock_amazon_orders):
         # GIVEN
         self.given_saved_session()
-        mock_amazon_orders.return_value.get_order_history_page.side_effect = AmazonOrdersError(
+        mock_amazon_orders.return_value.get_orders_page.side_effect = AmazonOrdersError(
             "Order history couldn't be parsed.", meta={"index": 10})
 
         # WHEN
-        result = await self.call_tool("get_order_history")
+        result = await self.call_tool("get_orders")
 
         # THEN
         self.assert_tool_error(result, "Order history couldn't be parsed.", "Context: {\"index\": 10}")

@@ -5,14 +5,14 @@ from tests.unittestcase import UnitTestCase
 
 
 class TestAmazonOrders(UnitTestCase):
-    async def test_get_order_history_runs_core_under_server_loop(self):
+    async def test_get_orders_runs_core_under_server_loop(self):
         # GIVEN
         self.given_saved_session()
         self.given_page_exists(self.test_config.constants.ORDER_HISTORY_URL,
                                "orders/order-history-2018-0.html")
 
         # WHEN
-        result = await self.call_tool("get_order_history", {"year": 2018, "limit": 1})
+        result = await self.call_tool("get_orders", {"year": 2018, "limit": 1})
 
         # THEN
         self.assertFalse(result.is_error, result.content)
