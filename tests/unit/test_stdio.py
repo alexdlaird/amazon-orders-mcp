@@ -35,7 +35,7 @@ class TestStdio(UnitTestCase):
 
         # WHEN
         async with Client(server) as client:
-            failed_result = await client.call_tool("get_order_history", {})
+            failed_result = await client.call_tool("get_orders", {})
             next_result = await client.call_tool("check_session", {})
 
         # THEN

@@ -12,15 +12,14 @@ from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, Typ
 import anyio
 import uvicorn
 from amazonorders.entity.family_member import FamilyMember
-from amazonorders.entity.gift_card_activity import GiftCardActivity
-from amazonorders.entity.invoice_pdf import InvoicePdf
+from amazonorders.entity.invoice import Invoice
 from amazonorders.entity.order import Order
 from amazonorders.entity.order_search_result import OrderSearchResult
 from amazonorders.entity.prime_payment import PrimePayment
 from amazonorders.entity.tracking import Tracking
 from amazonorders.entity.transaction import Transaction
 from amazonorders.exception import AmazonOrdersAuthError, AmazonOrdersBrowserNotInstalledError, AmazonOrdersError
-from amazonorders.gift_cards import AmazonGiftCards
+from amazonorders.gift_cards import AmazonGiftCards, GiftCards
 from amazonorders.orders import AmazonOrders
 from amazonorders.paging import PagedResults
 from amazonorders.prime import AmazonPrime
@@ -40,11 +39,11 @@ from starlette.websockets import WebSocketClose
 from amazonorders_mcp import __version__
 from amazonorders_mcp.schema import (
     FamilyMemberList,
-    GiftCardActivityList,
-    InvoicePdfList,
+    GiftCardsPage,
+    InvoiceList,
     OrderDetails,
-    OrderHistoryPage,
     OrderSearchPage,
+    OrdersPage,
     PrimePaymentList,
     TrackingDetails,
     TransactionsPage,
@@ -62,14 +61,14 @@ logger = logging.getLogger(__name__)
 
 #: What the server can do, given to the client when it connects.
 INSTRUCTIONS = (
-    "Reads the user's Amazon order history, invoice PDFs, package tracking, transactions, Gift Card balance and "
-    "activity, and Prime membership payments. The links from `get_invoice_pdfs` change on every call and may only "
+    "Reads the user's Amazon order history, invoices, package tracking, transactions, Gift Card balance and "
+    "activity, and Prime membership payments. The links from `get_invoices` change on every call and may only "
     "open in a browser signed in to the user's Amazon account, so give them to the user right away rather than "
     "keeping them. "
     "To find an order by what was bought, its number, or who it went to, use `search_orders` rather than paging "
-    "through `get_order_history`. "
+    "through `get_orders`. "
     "For the orders of an Amazon Household member, like a linked Teen account, get their `id` from "
-    "`get_family_members` and pass it to `get_order_history` as `family_member_id`. "
+    "`get_family_members` and pass it to `get_orders` as `family_member_id`. "
     "Each Amazon site, like amazon.com or amazon.de, has its own orders and its own sign-in. Tools read the user's "
     "default site unless given another as `site`, so pass the site an order was placed on, and `check_session` "
     "says which sites the user is signed in to. "
@@ -154,14 +153,6 @@ class SessionStatus(SiteSessionStatus):
                                                        "site and every other site with a saved session.")
 
 
-class GiftCardBalance(BaseModel):
-    """
-    The user's Amazon Gift Card balance, returned by the ``get_gift_card_balance`` tool.
-    """
-
-    balance: float = Field(description="The current Gift Card balance, in the currency of the Amazon site read.")
-
-
 class ConfigValues(BaseModel):
     """
     The settings that can be changed, returned by the ``get_config`` tool.
@@ -235,7 +226,7 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
 
             command = HEADLESS_SIGN_IN_COMMAND
             if site != await anyio.to_thread.run_sync(session.site):
-                command = f"amazon-orders --domain {site} login"
+                command = f"uvx amazon-orders --domain {site} login"
             raise ToolError("There's no display where the server runs, so it can't open a browser window for the "
                             f"user to sign in. Instead, they can sign in there with `{command}`, using the server's "
                             "config directory (for a server in a container, from a one-off container on the same "
@@ -266,49 +257,35 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         return SessionStatus(**signed_in.model_dump(), sites=[signed_in])
 
     @server.tool(annotations=READ_ONLY,
-                 description=tool_description("get_order_history"))
-    async def get_order_history(
+                 description=tool_description("get_orders"))
+    async def get_orders(
             ctx: Context,
-            year: Annotated[Optional[int], parameter_field("get_order_history", "year")] = None,
-            time_filter: Annotated[Optional[str], parameter_field("get_order_history", "time_filter")] = None,
-            order_filter: Annotated[Optional[str], parameter_field("get_order_history", "order_filter")] = None,
-            family_member_id: Annotated[Optional[str],
-                                        parameter_field("get_order_history", "family_member_id")] = None,
-            start_index: Annotated[Optional[int], parameter_field("get_order_history", "start_index")] = None,
-            full_details: Annotated[bool, parameter_field("get_order_history", "full_details")] = False,
-            limit: Annotated[Optional[int], parameter_field("get_order_history", "limit")] = DEFAULT_LIMIT,
-            cursor: Annotated[Optional[Dict[str, Any]], parameter_field("get_order_history", "cursor")] = None,
+            year: Annotated[Optional[int], parameter_field("get_orders", "year")] = None,
+            time_filter: Annotated[Optional[str], parameter_field("get_orders", "time_filter")] = None,
+            order_filter: Annotated[Optional[str], parameter_field("get_orders", "order_filter")] = None,
+            family_member_id: Annotated[Optional[str], parameter_field("get_orders", "family_member_id")] = None,
+            start_index: Annotated[Optional[int], parameter_field("get_orders", "start_index")] = None,
+            full_details: Annotated[bool, parameter_field("get_orders", "full_details")] = False,
+            limit: Annotated[Optional[int], parameter_field("get_orders", "limit")] = DEFAULT_LIMIT,
+            cursor: Annotated[Optional[Dict[str, Any]], parameter_field("get_orders", "cursor")] = None,
             site: Annotated[Optional[str], SITE] = None
-    ) -> OrderHistoryPage:
+    ) -> OrdersPage:
         progress = _progress_reporter(ctx, "Orders")
 
         def get(amazon_session: AmazonSession) -> PagedResults[Order]:
-            return AmazonOrders(amazon_session).get_order_history_page(year=year,
-                                                                       start_index=start_index,
-                                                                       full_details=full_details,
-                                                                       time_filter=time_filter,
-                                                                       order_filter=order_filter,
-                                                                       family_member_id=family_member_id,
-                                                                       limit=limit,
-                                                                       cursor=cursor,
-                                                                       progress_with_total=progress)
+            return AmazonOrders(amazon_session).get_orders_page(year=year,
+                                                                start_index=start_index,
+                                                                full_details=full_details,
+                                                                time_filter=time_filter,
+                                                                order_filter=order_filter,
+                                                                family_member_id=family_member_id,
+                                                                limit=limit,
+                                                                cursor=cursor,
+                                                                progress_with_total=progress)
 
         page = await run(get, site)
 
-        return OrderHistoryPage.model_validate(page.to_dict(exclude_none=True))
-
-    @server.tool(annotations=READ_ONLY,
-                 description=tool_description("get_order"))
-    async def get_order(
-            order_id: Annotated[str, parameter_field("get_order", "order_id")],
-            site: Annotated[Optional[str], SITE] = None
-    ) -> OrderDetails:
-        def get(amazon_session: AmazonSession) -> Order:
-            return AmazonOrders(amazon_session).get_order(order_id)
-
-        order = await run(get, site)
-
-        return OrderDetails.model_validate(order.to_dict(exclude_none=True))
+        return OrdersPage.model_validate(page.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("search_orders"))
@@ -332,6 +309,19 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         return OrderSearchPage.model_validate(page.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
+                 description=tool_description("get_order"))
+    async def get_order(
+            order_id: Annotated[str, parameter_field("get_order", "order_id")],
+            site: Annotated[Optional[str], SITE] = None
+    ) -> OrderDetails:
+        def get(amazon_session: AmazonSession) -> Order:
+            return AmazonOrders(amazon_session).get_order(order_id)
+
+        order = await run(get, site)
+
+        return OrderDetails.model_validate(order.to_dict(exclude_none=True))
+
+    @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_tracking"))
     async def get_tracking(
             order_id: Annotated[str, parameter_field("get_tracking", "order_id")],
@@ -346,18 +336,29 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         return TrackingDetails.model_validate(tracking.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
-                 description=tool_description("get_invoice_pdfs"))
-    async def get_invoice_pdfs(
-            order_id: Annotated[str, parameter_field("get_invoice_pdfs", "order_id")],
+                 description=tool_description("get_invoices"))
+    async def get_invoices(
+            order_id: Annotated[str, parameter_field("get_invoices", "order_id")],
             site: Annotated[Optional[str], SITE] = None
-    ) -> InvoicePdfList:
-        def get(amazon_session: AmazonSession) -> List[InvoicePdf]:
-            return AmazonOrders(amazon_session).get_invoice_pdfs(order_id)
+    ) -> InvoiceList:
+        def get(amazon_session: AmazonSession) -> List[Invoice]:
+            return AmazonOrders(amazon_session).get_invoices(order_id)
 
-        invoice_pdfs = await run(get, site)
+        invoices = await run(get, site)
 
-        return InvoicePdfList.model_validate(
-            {"items": [invoice_pdf.to_dict(exclude_none=True) for invoice_pdf in invoice_pdfs]})
+        return InvoiceList.model_validate({"items": [invoice.to_dict(exclude_none=True) for invoice in invoices]})
+
+    @server.tool(annotations=READ_ONLY,
+                 description=tool_description("get_family_members"))
+    async def get_family_members(
+            site: Annotated[Optional[str], SITE] = None
+    ) -> FamilyMemberList:
+        def get(amazon_session: AmazonSession) -> List[FamilyMember]:
+            return AmazonOrders(amazon_session).get_family_members()
+
+        members = await run(get, site)
+
+        return FamilyMemberList.model_validate({"items": [member.to_dict(exclude_none=True) for member in members]})
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_transactions"))
@@ -383,32 +384,25 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         return TransactionsPage.model_validate(page.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
-                 description="Get the user's current Amazon Gift Card balance. For what was spent or added, and "
-                             "when, use `get_gift_card_activity`.")
-    async def get_gift_card_balance(
-            site: Annotated[Optional[str], SITE] = None
-    ) -> GiftCardBalance:
-        def get(amazon_session: AmazonSession) -> float:
-            return AmazonGiftCards(amazon_session).get_balance()
-
-        return GiftCardBalance(balance=await run(get, site))
-
-    @server.tool(annotations=READ_ONLY,
-                 description=tool_description("get_gift_card_activity"))
-    async def get_gift_card_activity(
+                 description=tool_description("get_gift_cards"))
+    async def get_gift_cards(
             ctx: Context,
-            days: Annotated[int, parameter_field("get_gift_card_activity", "days")] = 365,
+            days: Annotated[int, parameter_field("get_gift_cards", "days")] = 365,
+            limit: Annotated[Optional[int], parameter_field("get_gift_cards", "limit")] = DEFAULT_LIMIT,
+            cursor: Annotated[Optional[Dict[str, Any]], parameter_field("get_gift_cards", "cursor")] = None,
             site: Annotated[Optional[str], SITE] = None
-    ) -> GiftCardActivityList:
+    ) -> GiftCardsPage:
         progress = _progress_reporter(ctx, "Gift Card activity entries")
 
-        def get(amazon_session: AmazonSession) -> List[GiftCardActivity]:
-            return AmazonGiftCards(amazon_session).get_gift_card_activity(days=days, progress=progress)
+        def get(amazon_session: AmazonSession) -> GiftCards:
+            return AmazonGiftCards(amazon_session).get_gift_cards_page(days=days,
+                                                                       limit=limit,
+                                                                       cursor=cursor,
+                                                                       progress=progress)
 
-        activities = await run(get, site)
+        page = await run(get, site)
 
-        return GiftCardActivityList.model_validate(
-            {"items": [activity.to_dict(exclude_none=True) for activity in activities]})
+        return GiftCardsPage.model_validate(page.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_prime_payments"))
@@ -423,16 +417,15 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
         return PrimePaymentList.model_validate({"items": [payment.to_dict(exclude_none=True) for payment in payments]})
 
     @server.tool(annotations=READ_ONLY,
-                 description=tool_description("get_family_members"))
-    async def get_family_members(
-            site: Annotated[Optional[str], SITE] = None
-    ) -> FamilyMemberList:
-        def get(amazon_session: AmazonSession) -> List[FamilyMember]:
-            return AmazonOrders(amazon_session).get_family_members()
-
-        members = await run(get, site)
-
-        return FamilyMemberList.model_validate({"items": [member.to_dict(exclude_none=True) for member in members]})
+                 description="Check with Amazon whether the user's saved sessions still work: on `site`, or else on "
+                             "their default site and every other Amazon site they have a saved session for. Also "
+                             "says which site is the default.")
+    async def check_session(
+            site: Annotated[Optional[str], Field(
+                description="The Amazon site to check, e.g. `amazon.de`. By default, the default site and every "
+                            "other site with a saved session are checked.")] = None
+    ) -> SessionStatus:
+        return await anyio.to_thread.run_sync(_session_status, session, site)
 
     @server.tool(annotations=READ_ONLY,
                  description="Get the settings that can be changed with `update_config`, and their values. "
@@ -467,17 +460,6 @@ def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
             raise ToolError(_describe_error(e)) from e
 
         return ConfigValue(key=key, value=new_value, saved=saved)
-
-    @server.tool(annotations=READ_ONLY,
-                 description="Check with Amazon whether the user's saved sessions still work: on `site`, or else on "
-                             "their default site and every other Amazon site they have a saved session for. Also "
-                             "says which site is the default.")
-    async def check_session(
-            site: Annotated[Optional[str], Field(
-                description="The Amazon site to check, e.g. `amazon.de`. By default, the default site and every "
-                            "other site with a saved session are checked.")] = None
-    ) -> SessionStatus:
-        return await anyio.to_thread.run_sync(_session_status, session, site)
 
     return server
 
@@ -623,7 +605,7 @@ def _sign_in_advice(session: SavedSession,
         return f"Offer to sign the user in with `sign_in`, or they can run `{SIGN_IN_COMMAND}` in a terminal"
 
     return (f"Offer to sign the user in with `sign_in` and `site` set to `{site}`, or they can run "
-            f"`amazon-orders --domain {site} login --browser` in a terminal")
+            f"`uvx amazon-orders --domain {site} login --browser` in a terminal")
 
 
 async def _report_signing_in(ctx: Context,

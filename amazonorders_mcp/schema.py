@@ -55,8 +55,8 @@ class ToolOutput(BaseModel):
         return copy.deepcopy(SCHEMA["tools"][cls.tool]["output_schema"])
 
 
-class OrderHistoryPage(ToolOutput):
-    tool = "get_order_history"
+class OrdersPage(ToolOutput):
+    tool = "get_orders"
 
 
 class FamilyMemberList(ToolOutput):
@@ -71,8 +71,8 @@ class OrderSearchPage(ToolOutput):
     tool = "search_orders"
 
 
-class InvoicePdfList(ToolOutput):
-    tool = "get_invoice_pdfs"
+class InvoiceList(ToolOutput):
+    tool = "get_invoices"
 
 
 class TrackingDetails(ToolOutput):
@@ -83,8 +83,8 @@ class TransactionsPage(ToolOutput):
     tool = "get_transactions"
 
 
-class GiftCardActivityList(ToolOutput):
-    tool = "get_gift_card_activity"
+class GiftCardsPage(ToolOutput):
+    tool = "get_gift_cards"
 
 
 class PrimePaymentList(ToolOutput):
