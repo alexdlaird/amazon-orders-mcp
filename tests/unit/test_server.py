@@ -144,7 +144,7 @@ class TestServer(UnitTestCase):
                       "sign_in": SIGN_IN_ADVICE, "error": None}
         self.assertEqual({**signed_out, "sites": [signed_out]}, result.structured_content)
 
-    async def test_check_session_trusts_saved_session_when_amazon_unreachable(self):
+    async def test_check_session_unknown_when_amazon_unreachable(self):
         # GIVEN
         self.given_saved_session()
         history_response = self.responses.add(responses.GET, self.test_config.constants.ORDER_HISTORY_URL,
@@ -155,9 +155,9 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertFalse(result.is_error)
-        signed_in = {"signed_in": True, "site": "https://www.amazon.com", "default": True, "sign_in": None,
-                     "error": None}
-        self.assertEqual({**signed_in, "sites": [signed_in]}, result.structured_content)
+        self.assertEqual(("https://www.amazon.com", None, True, None),
+                         tuple(result.structured_content[key] for key in ("site", "signed_in", "default", "sign_in")))
+        self.assertIn("Could not check the session on amazon.com.", result.structured_content["error"])
         self.assertEqual(1, history_response.call_count)
 
     async def test_check_session_checks_every_site_with_saved_session(self):

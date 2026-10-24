@@ -551,8 +551,7 @@ def _site_session_status(session: SavedSession,
     try:
         if signed_in is None:
             try:
-                session.run(_check_signed_in, site)
-                signed_in = True
+                signed_in = session.run(partial(AmazonSession.check_session, verify=True), site)
             except AmazonOrdersAuthError:
                 signed_in = False
         base_url = session.base_url(site)
@@ -570,20 +569,6 @@ def _site_base_url(session: SavedSession,
         return session.base_url(site)
     except AmazonOrdersError:
         return site
-
-
-def _check_signed_in(amazon_session: AmazonSession) -> None:
-    """
-    Check that Amazon still accepts the saved session, since its cookies outlive it. The Order history is requested
-    and checked as ``amazon-orders`` checks every response, so a session Amazon no longer accepts raises
-    :class:`~amazonorders.exception.AmazonOrdersAuthRedirectError`. A response that isn't ``ok`` says nothing about
-    the session, so it's still trusted then.
-    """
-    logger.debug("Checking that Amazon still accepts the saved session ...")
-
-    history_response = amazon_session.get(amazon_session.config.constants.ORDER_HISTORY_URL)
-    if history_response.response.ok:
-        amazon_session.check_response(history_response)
 
 
 def _describe_browser_choices(error: AmazonOrdersBrowserNotInstalledError) -> str:
