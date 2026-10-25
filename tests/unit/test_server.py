@@ -8,7 +8,7 @@ from unittest.mock import ANY, patch
 import responses
 from amazonorders.exception import AmazonOrdersAuthRedirectError, AmazonOrdersError, AmazonOrdersUnavailableError
 from amazonorders.gift_cards import AmazonGiftCards, GiftCards
-from amazonorders.orders import AmazonOrders
+from amazonorders.orders import AmazonOrders, Orders
 from amazonorders.paging import PagedResults
 from amazonorders.prime import AmazonPrime
 from amazonorders.transactions import AmazonTransactions
@@ -368,6 +368,23 @@ class TestServer(UnitTestCase):
         mock_amazon_orders.return_value.get_orders_page.assert_called_once_with(
             year=None, start_index=None, full_details=True, time_filter="last30", order_filter=None,
             family_member_id=None, limit=DEFAULT_LIMIT, cursor=None, progress_with_total=ANY)
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_get_orders_lists_household_members(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_orders.return_value.get_orders_page.return_value = Orders(
+            self.given_entities({"order_number": "112-0000000-0000001"}), None,
+            self.given_entities({"id": "A1EXAMPLETEEN1", "name": "Jane Doe"}))
+
+        # WHEN
+        result = await self.call_tool("get_orders")
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual({"household_members": [{"id": "A1EXAMPLETEEN1", "name": "Jane Doe"}],
+                          "items": [{"order_number": "112-0000000-0000001"}], "cursor": None, "has_more": False},
+                         result.structured_content)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_orders_from_cursor(self, mock_amazon_orders):

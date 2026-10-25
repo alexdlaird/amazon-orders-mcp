@@ -9,6 +9,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 
 - Optional `additional_instructions` on `create_server()` for applications composing extra tools.
+- `household_members` on `get_orders`' result: the Amazon Household members whose orders the user can view, to pass as `family_member_id`, read from the same page as the orders.
+
+### Changed
+
+- Requires `amazon-orders` 5.2. An account in an Amazon Household gets the whole household's orders from `get_orders` by default, as Amazon's order history now does; pass `family_member_id` as `self` for only the user's own.
+
+### Deprecated
+
+- `get_family_members`, use `get_orders`, whose `household_members` lists the same members. To be removed in 3.0.
 
 ## [2.0.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.0.0...2.0.1) - 2026-10-24
 

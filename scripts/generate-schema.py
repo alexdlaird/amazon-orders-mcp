@@ -24,7 +24,7 @@ from amazonorders.entity.shipment import Shipment
 from amazonorders.entity.tracking import Tracking
 from amazonorders.entity.transaction import Transaction
 from amazonorders.gift_cards import AmazonGiftCards, GiftCards
-from amazonorders.orders import AmazonOrders
+from amazonorders.orders import AmazonOrders, Orders
 from amazonorders.paging import PagedResults
 from amazonorders.prime import AmazonPrime
 from amazonorders.transactions import AmazonTransactions
@@ -73,6 +73,8 @@ class Tool(NamedTuple):
     #: For a ``"page"``, the :class:`~amazonorders.paging.PagedResults` the call returns, whose own field docs add to
     #: the output schema.
     page: Type[PagedResults] = PagedResults
+    #: The tool's description, where ``call``'s docstring names core calls instead of tools.
+    description: Optional[str] = None
 
 
 TOOLS = [
@@ -81,7 +83,8 @@ TOOLS = [
          Order, "page",
          parameter_calls={"time_filter": AmazonOrders.get_orders,
                           "order_filter": AmazonOrders.get_orders,
-                          "family_member_id": AmazonOrders.get_orders}),
+                          "family_member_id": AmazonOrders.get_orders},
+         page=Orders),
     Tool("get_order", AmazonOrders.get_order, ["order_id"], Order, "entity"),
     Tool("get_tracking", AmazonOrders.get_tracking, ["order_id", "shipment_id"], Tracking, "entity"),
     Tool("search_orders", AmazonOrders.search_orders, ["query", "limit", "cursor"], OrderSearchResult, "page",
@@ -93,7 +96,8 @@ TOOLS = [
     Tool("get_gift_cards", AmazonGiftCards.get_gift_cards_page, ["days", "limit", "cursor"], GiftCardActivity, "page",
          page=GiftCards),
     Tool("get_prime_payments", AmazonPrime.get_prime_payments, [], PrimePayment, "list"),
-    Tool("get_family_members", AmazonOrders.get_family_members, [], FamilyMember, "list"),
+    Tool("get_family_members", AmazonOrders.get_family_members, [], FamilyMember, "list",
+         description="Deprecated, use `get_orders`, whose `household_members` lists the same members."),
 ]
 
 
@@ -218,7 +222,7 @@ def _tool_schema(tool: Tool) -> Dict[str, Any]:
     docstring = docstring_parser.parse(tool.call.__doc__ or "")
 
     return {
-        "description": _first_sentence(_plain_text(docstring.description or "")),
+        "description": tool.description or _first_sentence(_plain_text(docstring.description or "")),
         "parameters": _parameter_descriptions(tool),
         "output_schema": _output_schema(tool, docstring),
     }
