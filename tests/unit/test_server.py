@@ -15,7 +15,7 @@ from amazonorders.transactions import AmazonTransactions
 from mcp.client import Client
 
 from amazonorders_mcp.schema import SCHEMA
-from amazonorders_mcp.server import AUTOMATED_SIGN_IN_DOCS_URL, DEFAULT_LIMIT, create_server
+from amazonorders_mcp.server import AUTOMATED_SIGN_IN_DOCS_URL, DEFAULT_LIMIT, INSTRUCTIONS, create_server
 from amazonorders_mcp.session import HEADLESS_SIGN_IN_COMMAND, SIGN_IN_COMMAND, SIGN_IN_TIMEOUT
 from tests.unittestcase import UnitTestCase
 
@@ -24,6 +24,25 @@ SIGN_IN_ADVICE = f"Offer to sign the user in with `sign_in`, or they can run `{S
 
 
 class TestServer(UnitTestCase):
+    async def test_default_instructions_are_unchanged(self):
+        for kwargs in ({}, {"additional_instructions": ""}):
+            with self.subTest(kwargs=kwargs):
+                async with Client(create_server(self.saved_session, **kwargs)) as client:
+                    self.assertEqual(INSTRUCTIONS, client.instructions)
+
+    async def test_additional_instructions_preserve_tools_and_other_servers(self):
+        async with Client(create_server(self.saved_session)) as client:
+            default_tools = (await client.list_tools()).tools
+
+        server = create_server(self.saved_session,
+                               additional_instructions="Additional tools have their own guidance.")
+        async with Client(server) as client:
+            self.assertEqual(INSTRUCTIONS + " Additional tools have their own guidance.", client.instructions)
+            self.assertEqual(default_tools, (await client.list_tools()).tools)
+
+        async with Client(create_server(self.saved_session)) as client:
+            self.assertEqual(INSTRUCTIONS, client.instructions)
+
     async def test_every_tool_is_read_only(self):
         # GIVEN
         server = create_server(self.saved_session)
