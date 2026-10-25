@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.0.1...HEAD)
 
+### Added
+
+- Optional `additional_instructions` on `create_server()` for applications composing extra tools.
+
 ## [2.0.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.0.0...2.0.1) - 2026-10-24
 
 ### Fixed

@@ -174,15 +174,19 @@ class ConfigValue(BaseModel):
     saved: bool = Field(description="Whether the change was saved, or only made until the server restarts.")
 
 
-def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
+def create_server(saved_session: Optional[SavedSession] = None,
+                  *,
+                  additional_instructions: str = "") -> MCPServer:
     """
     Create the MCP server, with a tool for each ``amazon-orders`` read, and one to sign in.
 
     :param saved_session: The session the tools use, by default the one the ``amazon-orders`` CLI saved.
+    :param additional_instructions: Instructions appended to the defaults when composing the server with other tools.
     :return: The server.
     """
     session = saved_session or SavedSession()
-    server = MCPServer(name="amazon-orders", instructions=INSTRUCTIONS, version=__version__, log_level="WARNING")
+    instructions = INSTRUCTIONS + (f" {additional_instructions}" if additional_instructions else "")
+    server = MCPServer(name="amazon-orders", instructions=instructions, version=__version__, log_level="WARNING")
 
     async def run(call: Callable[[AmazonSession], T],
                   site: Optional[str]) -> T:
