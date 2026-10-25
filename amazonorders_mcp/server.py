@@ -67,8 +67,9 @@ INSTRUCTIONS = (
     "keeping them. "
     "To find an order by what was bought, its number, or who it went to, use `search_orders` rather than paging "
     "through `get_orders`. "
-    "For the orders of an Amazon Household member, like a linked Teen account, get their `id` from "
-    "`get_family_members` and pass it to `get_orders` as `family_member_id`. "
+    "For an account in an Amazon Household, `get_orders` returns the whole household's orders by default, and its "
+    "`household_members` lists the members, like linked Teen accounts: pass a member's `id` as `family_member_id` "
+    "for only their orders, or `self` for only the user's own. "
     "Each Amazon site, like amazon.com or amazon.de, has its own orders and its own sign-in. Tools read the user's "
     "default site unless given another as `site`, so pass the site an order was placed on, and `check_session` "
     "says which sites the user is signed in to. "
@@ -174,15 +175,20 @@ class ConfigValue(BaseModel):
     saved: bool = Field(description="Whether the change was saved, or only made until the server restarts.")
 
 
-def create_server(saved_session: Optional[SavedSession] = None) -> MCPServer:
+def create_server(saved_session: Optional[SavedSession] = None,
+                  *,
+                  additional_instructions: str = "") -> MCPServer:
     """
     Create the MCP server, with a tool for each ``amazon-orders`` read, and one to sign in.
 
     :param saved_session: The session the tools use, by default the one the ``amazon-orders`` CLI saved.
+    :param additional_instructions: Instructions appended to the defaults when composing the server with other tools.
     :return: The server.
     """
     session = saved_session or SavedSession()
-    server = MCPServer(name="amazon-orders", instructions=INSTRUCTIONS, version=__version__, log_level="WARNING")
+    additional_instructions = additional_instructions.strip()
+    instructions = INSTRUCTIONS + (f" {additional_instructions}" if additional_instructions else "")
+    server = MCPServer(name="amazon-orders", instructions=instructions, version=__version__, log_level="WARNING")
 
     async def run(call: Callable[[AmazonSession], T],
                   site: Optional[str]) -> T:

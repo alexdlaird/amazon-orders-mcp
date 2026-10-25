@@ -96,7 +96,6 @@ Just ask your assistant about your orders, and it will use the following tools:
 | `get_order`          | One order, by order number                                                |
 | `get_tracking`       | A shipment's carrier and tracking number, from an order's shipment ID     |
 | `get_invoices`       | An order's printable summary, and any invoice PDFs the seller issues      |
-| `get_family_members` | Amazon Household members whose orders you can view, like Teen accounts    |
 | `get_transactions`   | A batch of payment transactions over a number of days, or for an order    |
 | `get_gift_cards`     | The Gift Card balance, with a batch of its activity over a number of days |
 | `get_prime_payments` | Prime membership fee charges, each with its order number                  |

@@ -8,14 +8,14 @@ from unittest.mock import ANY, patch
 import responses
 from amazonorders.exception import AmazonOrdersAuthRedirectError, AmazonOrdersError, AmazonOrdersUnavailableError
 from amazonorders.gift_cards import AmazonGiftCards, GiftCards
-from amazonorders.orders import AmazonOrders
+from amazonorders.orders import AmazonOrders, Orders
 from amazonorders.paging import PagedResults
 from amazonorders.prime import AmazonPrime
 from amazonorders.transactions import AmazonTransactions
 from mcp.client import Client
 
 from amazonorders_mcp.schema import SCHEMA
-from amazonorders_mcp.server import AUTOMATED_SIGN_IN_DOCS_URL, DEFAULT_LIMIT, create_server
+from amazonorders_mcp.server import AUTOMATED_SIGN_IN_DOCS_URL, DEFAULT_LIMIT, INSTRUCTIONS, create_server
 from amazonorders_mcp.session import HEADLESS_SIGN_IN_COMMAND, SIGN_IN_COMMAND, SIGN_IN_TIMEOUT
 from tests.unittestcase import UnitTestCase
 
@@ -24,6 +24,44 @@ SIGN_IN_ADVICE = f"Offer to sign the user in with `sign_in`, or they can run `{S
 
 
 class TestServer(UnitTestCase):
+    async def test_default_instructions_are_unchanged(self):
+        for kwargs in ({}, {"additional_instructions": ""}, {"additional_instructions": "  "}):
+            with self.subTest(kwargs=kwargs):
+                # GIVEN
+                server = create_server(self.saved_session, **kwargs)
+
+                # WHEN
+                async with Client(server) as client:
+                    instructions = client.instructions
+
+                # THEN
+                self.assertEqual(INSTRUCTIONS, instructions)
+
+    async def test_additional_instructions_are_appended(self):
+        # GIVEN
+        server = create_server(self.saved_session, additional_instructions="Additional tools have their own guidance.")
+
+        # WHEN
+        async with Client(server) as client:
+            instructions = client.instructions
+
+        # THEN
+        self.assertEqual(f"{INSTRUCTIONS} Additional tools have their own guidance.", instructions)
+
+    async def test_additional_instructions_keep_tools(self):
+        # GIVEN
+        default_server = create_server(self.saved_session)
+        server = create_server(self.saved_session, additional_instructions="Additional tools have their own guidance.")
+
+        # WHEN
+        async with Client(default_server) as client:
+            default_tools = (await client.list_tools()).tools
+        async with Client(server) as client:
+            tools = (await client.list_tools()).tools
+
+        # THEN
+        self.assertEqual(default_tools, tools)
+
     async def test_every_tool_is_read_only(self):
         # GIVEN
         server = create_server(self.saved_session)
@@ -330,6 +368,23 @@ class TestServer(UnitTestCase):
         mock_amazon_orders.return_value.get_orders_page.assert_called_once_with(
             year=None, start_index=None, full_details=True, time_filter="last30", order_filter=None,
             family_member_id=None, limit=DEFAULT_LIMIT, cursor=None, progress_with_total=ANY)
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_get_orders_lists_household_members(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_orders.return_value.get_orders_page.return_value = Orders(
+            self.given_entities({"order_number": "112-0000000-0000001"}), None,
+            self.given_entities({"id": "A1EXAMPLETEEN1", "name": "Jane Doe"}))
+
+        # WHEN
+        result = await self.call_tool("get_orders")
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual({"household_members": [{"id": "A1EXAMPLETEEN1", "name": "Jane Doe"}],
+                          "items": [{"order_number": "112-0000000-0000001"}], "cursor": None, "has_more": False},
+                         result.structured_content)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_orders_from_cursor(self, mock_amazon_orders):
