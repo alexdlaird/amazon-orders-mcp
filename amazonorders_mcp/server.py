@@ -185,6 +185,7 @@ def create_server(saved_session: Optional[SavedSession] = None,
     :return: The server.
     """
     session = saved_session or SavedSession()
+    additional_instructions = additional_instructions.strip()
     instructions = INSTRUCTIONS + (f" {additional_instructions}" if additional_instructions else "")
     server = MCPServer(name="amazon-orders", instructions=instructions, version=__version__, log_level="WARNING")
 

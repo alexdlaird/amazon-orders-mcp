@@ -25,23 +25,42 @@ SIGN_IN_ADVICE = f"Offer to sign the user in with `sign_in`, or they can run `{S
 
 class TestServer(UnitTestCase):
     async def test_default_instructions_are_unchanged(self):
-        for kwargs in ({}, {"additional_instructions": ""}):
+        for kwargs in ({}, {"additional_instructions": ""}, {"additional_instructions": "  "}):
             with self.subTest(kwargs=kwargs):
-                async with Client(create_server(self.saved_session, **kwargs)) as client:
-                    self.assertEqual(INSTRUCTIONS, client.instructions)
+                # GIVEN
+                server = create_server(self.saved_session, **kwargs)
 
-    async def test_additional_instructions_preserve_tools_and_other_servers(self):
-        async with Client(create_server(self.saved_session)) as client:
-            default_tools = (await client.list_tools()).tools
+                # WHEN
+                async with Client(server) as client:
+                    instructions = client.instructions
 
-        server = create_server(self.saved_session,
-                               additional_instructions="Additional tools have their own guidance.")
+                # THEN
+                self.assertEqual(INSTRUCTIONS, instructions)
+
+    async def test_additional_instructions_are_appended(self):
+        # GIVEN
+        server = create_server(self.saved_session, additional_instructions="Additional tools have their own guidance.")
+
+        # WHEN
         async with Client(server) as client:
-            self.assertEqual(INSTRUCTIONS + " Additional tools have their own guidance.", client.instructions)
-            self.assertEqual(default_tools, (await client.list_tools()).tools)
+            instructions = client.instructions
 
-        async with Client(create_server(self.saved_session)) as client:
-            self.assertEqual(INSTRUCTIONS, client.instructions)
+        # THEN
+        self.assertEqual(f"{INSTRUCTIONS} Additional tools have their own guidance.", instructions)
+
+    async def test_additional_instructions_keep_tools(self):
+        # GIVEN
+        default_server = create_server(self.saved_session)
+        server = create_server(self.saved_session, additional_instructions="Additional tools have their own guidance.")
+
+        # WHEN
+        async with Client(default_server) as client:
+            default_tools = (await client.list_tools()).tools
+        async with Client(server) as client:
+            tools = (await client.list_tools()).tools
+
+        # THEN
+        self.assertEqual(default_tools, tools)
 
     async def test_every_tool_is_read_only(self):
         # GIVEN
