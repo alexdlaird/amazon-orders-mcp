@@ -6,7 +6,7 @@ import os
 import socket
 from contextlib import asynccontextmanager, redirect_stderr
 from typing import AsyncIterator, Dict, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import anyio
 import httpx2
@@ -154,7 +154,7 @@ class TestStreamableHttp(UnitTestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual("application/json", response.headers["content-type"])
         self.assertFalse(result.is_error)
-        self.assertEqual({"items": [], "cursor": None, "has_more": False}, result.structured_content)
+        self.assertEqual({"items": [], "cursor": None, "has_more": False, "note": ANY}, result.structured_content)
         self.assertEqual([], reported)
 
     async def test_health_check_needs_no_token(self):

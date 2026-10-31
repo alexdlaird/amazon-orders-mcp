@@ -2,7 +2,9 @@ __copyright__ = "Copyright (c) 2026 Alex Laird"
 __license__ = "MIT"
 
 import inspect
+import json
 import os
+from datetime import date
 from unittest.mock import ANY, patch
 
 import responses
@@ -15,7 +17,8 @@ from amazonorders.transactions import AmazonTransactions
 from mcp.client import Client
 
 from amazonorders_mcp.schema import SCHEMA
-from amazonorders_mcp.server import AUTOMATED_SIGN_IN_DOCS_URL, DEFAULT_LIMIT, INSTRUCTIONS, create_server
+from amazonorders_mcp.server import AUTOMATED_SIGN_IN_DOCS_URL, DEFAULT_LIMIT, INSTRUCTIONS, INVOICE_LINKS_NOTE, \
+    create_server
 from amazonorders_mcp.session import HEADLESS_SIGN_IN_COMMAND, SIGN_IN_COMMAND, SIGN_IN_TIMEOUT
 from tests.unittestcase import UnitTestCase
 
@@ -115,6 +118,29 @@ class TestServer(UnitTestCase):
             self.assertEqual(tool_schema["output_schema"], tool.output_schema)
             for parameter, description in tool_schema["parameters"].items():
                 self.assertEqual(description, tool.input_schema["properties"][parameter]["description"])
+
+    async def test_tool_schemas_are_self_contained(self):
+        # GIVEN
+        server = create_server(self.saved_session)
+
+        # WHEN
+        async with Client(server) as client:
+            tools = (await client.list_tools()).tools
+
+        # THEN
+        for tool in tools:
+            schemas = json.dumps([tool.input_schema, tool.output_schema])
+            self.assertNotIn("$defs", schemas, f"{tool.name} has $defs a client may not show its model")
+            self.assertNotIn("$ref", schemas, f"{tool.name} has a $ref a client may not show its model")
+            for name, field in tool.input_schema["properties"].items():
+                self.assertNotIn("title", field, f"{tool.name}'s {name} repeats its name as a title")
+
+    async def test_instructions_point_common_questions_at_their_tools(self):
+        # THEN
+        self.assertIn("For what the user spent, use `get_transactions`", INSTRUCTIONS)
+        self.assertIn("so total each site separately", INSTRUCTIONS)
+        self.assertIn("read each shipment's `delivery_status`", INSTRUCTIONS)
+        self.assertIn("repeat addresses or payment details only when they ask", INSTRUCTIONS)
 
     async def test_tool_parameters_exist_on_core_calls(self):
         # GIVEN
@@ -368,6 +394,73 @@ class TestServer(UnitTestCase):
         mock_amazon_orders.return_value.get_orders_page.assert_called_once_with(
             year=None, start_index=None, full_details=True, time_filter="last30", order_filter=None,
             family_member_id=None, limit=DEFAULT_LIMIT, cursor=None, progress_with_total=ANY)
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_get_orders_with_none_says_where_else_to_look(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_orders.return_value.get_orders_page.return_value = PagedResults([], None)
+
+        # WHEN
+        result = await self.call_tool("get_orders", {})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual([], result.structured_content["items"])
+        self.assertIn(f"No orders so far in {date.today().year}", result.structured_content["note"])
+        self.assertIn("`digital-orders`", result.structured_content["note"])
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_get_orders_with_none_for_a_year_only_mentions_digital_orders(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_orders.return_value.get_orders_page.return_value = PagedResults([], None)
+
+        # WHEN
+        result = await self.call_tool("get_orders", {"year": 2019})
+
+        # THEN
+        note = result.structured_content["note"]
+        self.assertNotIn("No orders so far", note)
+        self.assertIn("`digital-orders`", note)
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_get_orders_with_every_filter_set_adds_no_note(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_orders.return_value.get_orders_page.return_value = PagedResults([], None)
+
+        # WHEN
+        result = await self.call_tool("get_orders", {"year": 2019, "order_filter": "digital-orders"})
+
+        # THEN
+        self.assertNotIn("note", result.structured_content)
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_get_invoices_says_to_hand_over_links_now(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_orders.return_value.get_invoices.return_value = self.given_entities(
+            {"title": "Printable Order Summary", "link": "https://www.amazon.com/summary"})
+
+        # WHEN
+        result = await self.call_tool("get_invoices", {"order_id": "112-0000000-0000001"})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual(INVOICE_LINKS_NOTE, result.structured_content["note"])
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    async def test_get_invoices_without_any_adds_no_note(self, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_orders.return_value.get_invoices.return_value = []
+
+        # WHEN
+        result = await self.call_tool("get_invoices", {"order_id": "112-0000000-0000001"})
+
+        # THEN
+        self.assertEqual({"items": []}, result.structured_content)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_orders_lists_household_members(self, mock_amazon_orders):
