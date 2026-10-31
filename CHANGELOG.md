@@ -6,6 +6,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.1.1...HEAD)
 
+### Added
+
+- A `note` on `get_orders` when it finds nothing, pointing to earlier years and digital orders, and on `get_invoices`, to share its links right away.
+
+### Changed
+
+- Better guidance for questions about spending and deliveries.
+- Leaner tool schemas, without `$defs`, for clients like ChatGPT.
+
 ## [2.1.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.1.0...2.1.1) - 2026-10-31
 
 ### Fixed

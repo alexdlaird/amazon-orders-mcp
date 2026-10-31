@@ -6,8 +6,9 @@ import hmac
 import json
 import logging
 import os
+from datetime import date
 from functools import partial
-from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, TypeVar, Union
+from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, TypeVar, Union, cast
 
 import anyio
 import uvicorn
@@ -28,7 +29,7 @@ from amazonorders.transactions import AmazonTransactions
 from amazonorders.util import has_display
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import ToolAnnotations
+from mcp.types import Tool, ToolAnnotations
 from pydantic import BaseModel, Field
 from starlette.datastructures import Headers
 from starlette.requests import Request
@@ -73,10 +74,20 @@ INSTRUCTIONS = (
     "Each Amazon site, like amazon.com or amazon.de, has its own orders and its own sign-in. Tools read the user's "
     "default site unless given another as `site`, so pass the site an order was placed on, and `check_session` "
     "says which sites the user is signed in to. "
+    "For what the user spent, use `get_transactions`, the charges and refunds as they posted, rather than adding up "
+    "order totals. Each site's amounts are in its own currency, so total each site separately. "
+    "For what's arriving, get recent orders (`time_filter` `last30`) and read each shipment's `delivery_status`; "
+    "`get_tracking` gives a shipment's carrier and tracking number. "
+    "Answer with what the user asked for, summarized, and repeat addresses or payment details only when they ask. "
     "Every tool but `sign_in` and `update_config` is read-only. If a tool says the user isn't signed in, offer to "
     "sign them in with `sign_in`, and call it only once they agree. If that can't work, they can run "
     f"`{SIGN_IN_COMMAND}` in a terminal instead."
 )
+
+#: What ``get_invoices`` adds to links it returns, since not every client applies ``INSTRUCTIONS``, but each reads the
+#: tool's result.
+INVOICE_LINKS_NOTE = ("These links change on every call and may only open in a browser signed in to the user's "
+                      "Amazon account, so give them to the user now rather than keeping them.")
 
 #: The annotations every tool has, since none of them change anything on Amazon.
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=True)
@@ -188,7 +199,8 @@ def create_server(saved_session: Optional[SavedSession] = None,
     session = saved_session or SavedSession()
     additional_instructions = additional_instructions.strip()
     instructions = INSTRUCTIONS + (f" {additional_instructions}" if additional_instructions else "")
-    server = MCPServer(name="amazon-orders", instructions=instructions, version=__version__, log_level="WARNING")
+    server = AmazonOrdersServer(name="amazon-orders", instructions=instructions, version=__version__,
+                                log_level="WARNING")
 
     async def run(call: Callable[[AmazonSession], T],
                   site: Optional[str]) -> T:
@@ -291,7 +303,12 @@ def create_server(saved_session: Optional[SavedSession] = None,
 
         page = await run(get, site)
 
-        return OrdersPage.model_validate(page.to_dict(exclude_none=True))
+        result = page.to_dict(exclude_none=True)
+        if not result.get("items") and cursor is None:
+            note = _empty_orders_note(year, time_filter, order_filter)
+            if note:
+                result["note"] = note
+        return OrdersPage.model_validate(result)
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("search_orders"))
@@ -352,7 +369,10 @@ def create_server(saved_session: Optional[SavedSession] = None,
 
         invoices = await run(get, site)
 
-        return InvoiceList.model_validate({"items": [invoice.to_dict(exclude_none=True) for invoice in invoices]})
+        result: Dict[str, Any] = {"items": [invoice.to_dict(exclude_none=True) for invoice in invoices]}
+        if invoices:
+            result["note"] = INVOICE_LINKS_NOTE
+        return InvoiceList.model_validate(result)
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_family_members"))
@@ -468,6 +488,86 @@ def create_server(saved_session: Optional[SavedSession] = None,
         return ConfigValue(key=key, value=new_value, saved=saved)
 
     return server
+
+
+class AmazonOrdersServer(MCPServer):
+    """
+    The MCP server, publishing tool schemas any client can read whole.
+    """
+
+    async def list_tools(self) -> List[Tool]:
+        tools = await super().list_tools()
+        for tool in tools:
+            tool.input_schema = _inline_definitions(tool.input_schema)
+            _drop_field_titles(tool.input_schema)
+            if tool.output_schema:
+                tool.output_schema = _inline_definitions(tool.output_schema)
+                _drop_field_titles(tool.output_schema)
+        return tools
+
+
+def _inline_definitions(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Self-contain a tool schema: each ``$ref`` becomes the definition it names, and ``$defs`` goes. ChatGPT validates
+    against ``$defs`` but doesn't show them to its model, which then guesses the nested shapes.
+
+    :param schema: A pydantic-generated JSON schema.
+    :return: The same schema with no ``$ref`` or ``$defs``.
+    """
+    return cast(Dict[str, Any], _resolve_references(schema, schema.get("$defs", {})))
+
+
+def _resolve_references(node: Any,
+                        definitions: Dict[str, Any]) -> Any:
+    if isinstance(node, list):
+        return [_resolve_references(item, definitions) for item in node]
+    if not isinstance(node, dict):
+        return node
+    if "$ref" in node:
+        siblings = {key: value for key, value in node.items() if key != "$ref"}
+        return _resolve_references({**definitions[node["$ref"].removeprefix("#/$defs/")], **siblings}, definitions)
+    return {key: ({name: _resolve_references(field, definitions) for name, field in value.items()}
+                  if key == "properties" else _resolve_references(value, definitions))
+            for key, value in node.items() if key != "$defs"}
+
+
+def _drop_field_titles(schema: Any) -> None:
+    """
+    Drop the titles pydantic generates from field names ("Order Id" for ``order_id``): they restate the name and cost
+    tokens in every tool listing.
+
+    :param schema: A JSON schema, changed in place.
+    """
+    if isinstance(schema, dict):
+        for name, field in (schema.get("properties") or {}).items():
+            if isinstance(field, dict) and str(field.get("title", "")).replace(" ", "_").casefold() == name.casefold():
+                del field["title"]
+        for value in schema.values():
+            _drop_field_titles(value)
+    elif isinstance(schema, list):
+        for value in schema:
+            _drop_field_titles(value)
+
+
+def _empty_orders_note(year: Optional[int],
+                       time_filter: Optional[str],
+                       order_filter: Optional[str]) -> Optional[str]:
+    """
+    Say where else to look when ``get_orders`` finds nothing: the default history is only this year's, and leaves out
+    digital orders.
+
+    :param year: The ``year`` the call was given.
+    :param time_filter: The ``time_filter`` the call was given.
+    :param order_filter: The ``order_filter`` the call was given.
+    :return: Where else to look, if anywhere.
+    """
+    places = []
+    if year is None and time_filter is None:
+        places.append(f"No orders so far in {date.today().year}: pass `year` or `time_filter` for earlier ones.")
+    if order_filter is None:
+        places.append("Digital orders, like Kindle books, aren't in the default history: pass `order_filter` "
+                      "`digital-orders` for those.")
+    return " ".join(places) or None
 
 
 def create_http_app(server: MCPServer,
