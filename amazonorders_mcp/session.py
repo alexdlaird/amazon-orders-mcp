@@ -11,11 +11,12 @@ from contextlib import ExitStack
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 from urllib.parse import urlparse
 
+from amazonauth.contrib.browser.playwright import PlaywrightBrowserLogin
+from amazonauth.region_data import REGION_SITES
+from amazonauth.session import IODefault
 from amazonorders.conf import AmazonOrdersConfig
-from amazonorders.contrib.browser.playwright import PlaywrightBrowserLogin
 from amazonorders.exception import AmazonOrdersAuthError, AmazonOrdersBrowserNotInstalledError, AmazonOrdersError
-from amazonorders.region_data import REGION_SITES
-from amazonorders.session import AmazonSession, IODefault
+from amazonorders.session import AmazonSession
 from amazonorders.util import to_type
 
 logger = logging.getLogger(__name__)
