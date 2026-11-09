@@ -9,7 +9,7 @@
 
 `amazon-orders-mcp` is an unofficial [MCP](https://modelcontextprotocol.io) server for Amazon order history, line items,
 and transactions, built on [`amazon-orders`](https://github.com/alexdlaird/amazon-orders). It gives your AI assistant
-tools for your Amazon account, available from Claude and any other MCP client.
+tools for your Amazon account, available from any MCP client.
 
 The server never sees your credentials. When you sign in, a browser window opens on Amazon's own page, and the server
 reuses the session that leaves behind. It also runs on a server without a display, where you sign in from a terminal
@@ -24,17 +24,6 @@ instead (see [Remote Clients](#remote-clients)).
 `amazon-orders-mcp` is available on [PyPI](https://pypi.org/project/amazon-orders-mcp/) and is run
 with [`uvx`](https://docs.astral.sh/uv/), so there's nothing to install up front. Add it to your AI assistant:
 
-### Claude
-
-**Claude Desktop:** download `amazon-orders-mcp-<version>.mcpb` from the
-[latest release](https://github.com/alexdlaird/amazon-orders-mcp/releases/latest) and open it.
-
-**Claude Code:**
-
-```sh
-claude mcp add amazon-orders -- uvx amazon-orders-mcp
-```
-
 ### ChatGPT
 
 **ChatGPT Desktop:** in Settings → Plugins, add an MCP server of type STDIO, with `uvx` as the command and
@@ -44,6 +33,17 @@ claude mcp add amazon-orders -- uvx amazon-orders-mcp
 
 ```sh
 codex mcp add amazon-orders -- uvx amazon-orders-mcp
+```
+
+### Claude
+
+**Claude Desktop:** download `amazon-orders-mcp-<version>.mcpb` from the
+[latest release](https://github.com/alexdlaird/amazon-orders-mcp/releases/latest) and open it.
+
+**Claude Code:**
+
+```sh
+claude mcp add amazon-orders -- uvx amazon-orders-mcp
 ```
 
 ### Other Clients

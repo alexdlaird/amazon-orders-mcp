@@ -12,6 +12,7 @@ from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, Typ
 
 import anyio
 import uvicorn
+from amazonauth.util import has_display
 from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.invoice import Invoice
 from amazonorders.entity.order import Order
@@ -26,7 +27,6 @@ from amazonorders.paging import PagedResults
 from amazonorders.prime import AmazonPrime
 from amazonorders.session import AmazonSession
 from amazonorders.transactions import AmazonTransactions
-from amazonorders.util import has_display
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import Tool, ToolAnnotations

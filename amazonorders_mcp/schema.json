@@ -601,7 +601,7 @@
         "properties": {
           "carrier": {
             "type": "string",
-            "description": "The carrier name, e.g. `UPS`, or `Amazon` for Amazon's own delivery network."
+            "description": "The carrier the page names, e.g. `UPS`, or `None` when it names none (the \"Delivery Info\" layout)."
           },
           "tracking_number": {
             "type": "string",
