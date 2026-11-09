@@ -246,10 +246,9 @@ def create_server(saved_session: Optional[SavedSession] = None,
             if site != await anyio.to_thread.run_sync(session.site):
                 command = f"uvx amazon-orders --domain {site} login"
             raise ToolError("There's no display where the server runs, so it can't open a browser window for the "
-                            f"user to sign in. Instead, they can sign in there with `{command}`, using the server's "
-                            "config directory (for a server in a container, from a one-off container on the same "
-                            "volume), and enter their credentials, or set them in that command's environment: "
-                            f"{AUTOMATED_SIGN_IN_DOCS_URL}. The server uses the new session on its next call.")
+                            f"user to sign in. They can sign in there with `{command}`, using the server's config "
+                            f"directory: {AUTOMATED_SIGN_IN_DOCS_URL}. The server uses the new session on its next "
+                            "call.")
 
         async with anyio.create_task_group() as task_group:
             task_group.start_soon(_report_signing_in, ctx, session, site)
