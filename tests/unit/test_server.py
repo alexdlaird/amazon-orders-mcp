@@ -75,7 +75,7 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertEqual({"check_session", "sign_in", "get_config", "update_config", "get_orders", "get_order",
-                          "search_orders", "get_family_members", "get_tracking", "get_invoices", "get_transactions",
+                          "search_orders", "get_tracking", "get_invoices", "get_transactions",
                           "get_gift_cards", "get_prime_payments"},
                          {tool.name for tool in tools})
         for tool in tools:
@@ -108,7 +108,7 @@ class TestServer(UnitTestCase):
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
 
         # THEN
-        self.assertEqual({"get_orders", "get_family_members", "get_order", "search_orders", "get_tracking",
+        self.assertEqual({"get_orders", "get_order", "search_orders", "get_tracking",
                           "get_invoices", "get_transactions", "get_gift_cards", "get_prime_payments"},
                          set(SCHEMA["tools"]))
         for name, tool_schema in SCHEMA["tools"].items():
@@ -151,7 +151,6 @@ class TestServer(UnitTestCase):
             "search_orders": AmazonOrders.search_orders_page,
             "get_tracking": AmazonOrders.get_tracking,
             "get_invoices": AmazonOrders.get_invoices,
-            "get_family_members": AmazonOrders.get_family_members,
             "get_transactions": AmazonTransactions.get_transactions_page,
             "get_gift_cards": AmazonGiftCards.get_gift_cards_page,
             "get_prime_payments": AmazonPrime.get_prime_payments,

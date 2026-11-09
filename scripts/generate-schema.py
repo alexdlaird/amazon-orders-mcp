@@ -96,8 +96,6 @@ TOOLS = [
     Tool("get_gift_cards", AmazonGiftCards.get_gift_cards_page, ["days", "limit", "cursor"], GiftCardActivity, "page",
          page=GiftCards),
     Tool("get_prime_payments", AmazonPrime.get_prime_payments, [], PrimePayment, "list"),
-    Tool("get_family_members", AmazonOrders.get_family_members, [], FamilyMember, "list",
-         description="Deprecated, use `get_orders`, whose `household_members` lists the same members."),
 ]
 
 

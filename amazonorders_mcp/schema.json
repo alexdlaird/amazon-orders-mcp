@@ -943,36 +943,6 @@
         },
         "additionalProperties": true
       }
-    },
-    "get_family_members": {
-      "description": "Deprecated, use `get_orders`, whose `household_members` lists the same members.",
-      "parameters": {},
-      "output_schema": {
-        "type": "object",
-        "description": "The FamilyMembers, or an empty list if the account has none.",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "description": "A member of the Amazon Household whose Orders the account can view, such as a linked Teen account. Pass its `id` as `family_member_id` to `get_orders` to get their Orders.",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "description": "The FamilyMember ID, the value Amazon's household member filter (`householdMembers`) takes."
-                },
-                "name": {
-                  "type": "string",
-                  "description": "The FamilyMember name."
-                }
-              },
-              "additionalProperties": true
-            },
-            "description": "The FamilyMembers, or an empty list if the account has none."
-          }
-        },
-        "additionalProperties": true
-      }
     }
   }
 }

@@ -6,6 +6,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.1.2...HEAD)
 
+### Changed
+
+- **Breaking:** Requires `amazon-orders` 6.0.
+
+### Removed
+
+- **Breaking:** The deprecated `get_family_members`, use `get_orders`, whose `household_members` lists the same members.
+
 ### Fixed
 
 - Bug fixes and stability improvements.

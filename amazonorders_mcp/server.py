@@ -13,7 +13,6 @@ from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, Typ
 import anyio
 import uvicorn
 from amazonauth.util import has_display
-from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.invoice import Invoice
 from amazonorders.entity.order import Order
 from amazonorders.entity.order_search_result import OrderSearchResult
@@ -39,7 +38,6 @@ from starlette.websockets import WebSocketClose
 
 from amazonorders_mcp import __version__
 from amazonorders_mcp.schema import (
-    FamilyMemberList,
     GiftCardsPage,
     InvoiceList,
     OrderDetails,
@@ -373,18 +371,6 @@ def create_server(saved_session: Optional[SavedSession] = None,
         if invoices:
             result["note"] = INVOICE_LINKS_NOTE
         return InvoiceList.model_validate(result)
-
-    @server.tool(annotations=READ_ONLY,
-                 description=tool_description("get_family_members"))
-    async def get_family_members(
-            site: Annotated[Optional[str], SITE] = None
-    ) -> FamilyMemberList:
-        def get(amazon_session: AmazonSession) -> List[FamilyMember]:
-            return AmazonOrders(amazon_session).get_family_members()
-
-        members = await run(get, site)
-
-        return FamilyMemberList.model_validate({"items": [member.to_dict(exclude_none=True) for member in members]})
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_transactions"))
