@@ -88,6 +88,8 @@ ogp_custom_meta_tags = [
     '<meta name="twitter:card" content="summary_large_image">',
 ]
 
+google_analytics_id = "G-G9ZXMCVTK2"
+
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
@@ -121,6 +123,7 @@ html_theme_options = {
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
+html_context = {"google_analytics_id": google_analytics_id}
 
 html_logo = "https://amazon-orders.readthedocs.io/_static/logo-light.png"
 

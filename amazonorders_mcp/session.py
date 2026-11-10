@@ -105,6 +105,24 @@ class SavedSession:
         with site_session.lock:
             return site_session.run(call)
 
+    def run_with_session(self,
+                         call: Callable[[AmazonSession], T],
+                         site: Optional[str] = None) -> T:
+        """
+        Run a call with a site's session, signed in or not. Like :meth:`run`, other calls to the site wait until it's
+        done, but it's never retried, and what it does with the session is up to it. Anything it saves to the session
+        is used by the next call, even if it raises. It can't call back into this ``SavedSession``, since it would wait
+        on itself.
+
+        :param call: The call to make with the session.
+        :param site: The Amazon site (e.g. ``amazon.de``), by default the config's ``domain``.
+        :return: The call's result.
+        :raises AmazonOrdersError: If the site isn't an Amazon site that can be read.
+        """
+        site_session = self._site_session(site)
+        with site_session.lock:
+            return site_session.run_with_session(call)
+
     def sign_in(self,
                 timeout: int = SIGN_IN_TIMEOUT,
                 browser: Optional[str] = None,
@@ -122,13 +140,13 @@ class SavedSession:
         :raises AmazonOrdersError: If a browser can't be downloaded, or the sign-in isn't completed in time, or Amazon
             doesn't accept it.
         """
+        site = self.site(site)
         site_session = self._site_session(site)
         site_session.sign_in_status = WAITING_TO_SIGN_IN_STATUS
         if browser and browser != self.get_config()["preferences"]["browser"]:
             self.update_config("browser", browser)
 
-        with site_session.lock:
-            site_session.sign_in(timeout, browser)
+        self.run_with_session(lambda session: site_session.sign_in(session, timeout, browser), site)
 
     def sign_in_status(self,
                        site: str) -> str:
@@ -366,11 +384,20 @@ class _SiteSession:
 
             return self._run_signed_in(call)
 
+    def run_with_session(self,
+                         call: Callable[[AmazonSession], T]) -> T:
+        amazon_session = self._session()
+        try:
+            return call(amazon_session)
+        finally:
+            self._loaded_cookie_jar_mtime = amazon_session.cookie_jar_mtime
+            self._reuse_only(amazon_session)
+
     def sign_in(self,
+                amazon_session: AmazonSession,
                 timeout: int,
                 browser: Optional[str]) -> None:
         self.sign_in_status = WAITING_TO_SIGN_IN_STATUS
-        amazon_session = self._session()
 
         browser_login = PlaywrightBrowserLogin(amazon_session)
         try:
@@ -384,8 +411,6 @@ class _SiteSession:
 
             self.sign_in_status = WAITING_TO_SIGN_IN_STATUS
             browser_login.login(timeout)
-        finally:
-            self._loaded_cookie_jar_mtime = amazon_session.cookie_jar_mtime
 
     def _run_signed_in(self,
                        call: Callable[[AmazonSession], T]) -> T:

@@ -10,7 +10,56 @@ permissions:
   actions: write
 
 jobs:
+  schema:
+    name: Regenerate tool schema
+    runs-on: ubuntu-latest
+
+    env:
+      FORCE_COLOR: 1
+      PYTHONUNBUFFERED: 1
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          skip-token-revoke: true
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: develop
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Regenerate schema
+        id: regenerate
+        run: |
+          make schema
+          if git diff --quiet amazonorders_mcp/schema.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit schema to develop (signed)
+        if: ${{ steps.regenerate.outputs.changed == 'true' }}
+        uses: IAreKyleW00t/verified-bot-commit@v2.3.5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: alexdlaird/amazon-orders-mcp
+          ref: develop
+          files: amazonorders_mcp/schema.json
+          if-no-commit: error
+          message: "Regenerate tool schema"
+
   prereq:
+    needs: [schema]
     uses: alexdlaird/.github/.github/workflows/release-prereq.yml@main
     with:
       version_file: 'amazonorders_mcp/__init__.py'

@@ -14,7 +14,7 @@ maintainers = [{ name = "Alex Laird", email = "contact@alexlaird.com" }]
 requires-python = ">=3.10"
 dependencies = [
     "amazon-auth>=0.2.2,<2",
-    "amazon-orders[browser]>=5.3.1,<6",
+    "amazon-orders[browser]>=5.3.2,<6",
     "mcp>=2.3,<3",
 ]
 classifiers = [
