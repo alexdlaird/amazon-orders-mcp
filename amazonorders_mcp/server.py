@@ -13,6 +13,7 @@ from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, Typ
 import anyio
 import uvicorn
 from amazonauth.util import has_display
+from amazonorders.conf import AmazonOrdersConfig
 from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.invoice import Invoice
 from amazonorders.entity.order import Order
@@ -29,15 +30,21 @@ from amazonorders.session import AmazonSession
 from amazonorders.transactions import AmazonTransactions
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import Tool, ToolAnnotations
+from mcp.types import Icon, Tool, ToolAnnotations
 from pydantic import BaseModel, Field
 from starlette.datastructures import Headers
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.responses import FileResponse, PlainTextResponse, Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from starlette.websockets import WebSocketClose
 
 from amazonorders_mcp import __version__
+from amazonorders_mcp.oauth import (
+    CONSENT_PATH,
+    OAUTH_STATE_FILENAME,
+    AuthorizationServerMetadataMiddleware,
+    OwnerOAuthProvider,
+)
 from amazonorders_mcp.schema import (
     FamilyMemberList,
     GiftCardsPage,
@@ -128,8 +135,20 @@ DEFAULT_PORT = 8000
 #: The path that answers a health check over HTTP, without a token and without calling Amazon.
 HEALTH_PATH = "/health"
 
+#: The path of the server's icon over HTTP, for clients that show a site's icon, served without a token.
+FAVICON_PATH = "/favicon.ico"
+
+#: The paths served over HTTP without a token.
+PUBLIC_PATHS = (HEALTH_PATH, FAVICON_PATH)
+
 #: The environment variable that can hold the bearer token HTTP clients must send, instead of ``--token-file``.
 AUTHORIZATION_ENVIRONMENT_VARIABLE = "AMAZON_ORDERS_MCP_TOKEN"
+
+#: The environment variable that can hold the server's public URL, instead of ``--public-url``.
+PUBLIC_URL_ENVIRONMENT_VARIABLE = "AMAZON_ORDERS_MCP_PUBLIC_URL"
+
+#: The server's icon, for clients that show one.
+ICON_URL = "https://raw.githubusercontent.com/alexdlaird/amazon-orders-mcp/main/mcpb/icon.png"
 
 #: The ``site`` parameter every tool that reads Amazon takes.
 SITE = Field(description="The Amazon site to read, e.g. `amazon.de`, since each site has its own orders. By default, "
@@ -188,19 +207,25 @@ class ConfigValue(BaseModel):
 
 def create_server(saved_session: Optional[SavedSession] = None,
                   *,
-                  additional_instructions: str = "") -> MCPServer:
+                  additional_instructions: str = "",
+                  oauth_provider: Optional[OwnerOAuthProvider] = None) -> MCPServer:
     """
     Create the MCP server, with a tool for each ``amazon-orders`` read, and one to sign in.
 
     :param saved_session: The session the tools use, by default the one the ``amazon-orders`` CLI saved.
     :param additional_instructions: Instructions appended to the defaults when composing the server with other tools.
+    :param oauth_provider: The authorization server that signs clients in over HTTP, if they sign in with OAuth.
     :return: The server.
     """
     session = saved_session or SavedSession()
     additional_instructions = additional_instructions.strip()
     instructions = INSTRUCTIONS + (f" {additional_instructions}" if additional_instructions else "")
     server = AmazonOrdersServer(name="amazon-orders", instructions=instructions, version=__version__,
-                                log_level="WARNING")
+                                icons=[Icon(src=ICON_URL, mime_type="image/png", sizes=["512x512"])],
+                                log_level="WARNING", auth_server_provider=oauth_provider,
+                                auth=oauth_provider.auth_settings() if oauth_provider else None)
+    if oauth_provider:
+        server.custom_route(CONSENT_PATH, methods=["GET", "POST"], include_in_schema=False)(oauth_provider.consent)
 
     async def run(call: Callable[[AmazonSession], T],
                   site: Optional[str]) -> T:
@@ -238,6 +263,17 @@ def create_server(saved_session: Optional[SavedSession] = None,
             site = await anyio.to_thread.run_sync(session.site, site)
         except AmazonOrdersError as e:
             raise ToolError(_describe_error(e)) from e
+
+        if _is_remote_request(ctx):
+            logger.debug("Tool call failed, the user is connected remotely, so a browser window wouldn't reach them")
+
+            command = SIGN_IN_COMMAND if has_display() else HEADLESS_SIGN_IN_COMMAND
+            if site != await anyio.to_thread.run_sync(session.site):
+                command = command.replace("amazon-orders ", f"amazon-orders --domain {site} ", 1)
+            raise ToolError("The user is connected to the server remotely, so a browser window where it runs "
+                            f"wouldn't reach them. When they're at that machine, they can sign in there with "
+                            f"`{command}`, using the server's config directory: {AUTOMATED_SIGN_IN_DOCS_URL}. The "
+                            "server uses the new session on its next call.")
 
         if not has_display():
             logger.debug("Tool call failed, there's no display to open a browser window on")
@@ -572,7 +608,8 @@ def _empty_orders_note(year: Optional[int],
 def create_http_app(server: MCPServer,
                     host: str = DEFAULT_HOST,
                     json_response: bool = False,
-                    token: Optional[str] = None) -> ASGIApp:
+                    token: Optional[str] = None,
+                    oauth_provider: Optional[OwnerOAuthProvider] = None) -> ASGIApp:
     """
     Create the app that serves the MCP server over Streamable HTTP, at ``/mcp``. It's stateless, since every client
     is served from the one saved session, and :data:`HEALTH_PATH` answers ``ok`` without calling Amazon.
@@ -583,20 +620,57 @@ def create_http_app(server: MCPServer,
     :param json_response: Whether to answer each request with JSON, instead of an event stream that also carries the
         call's progress.
     :param token: A bearer token every request but the health check must carry, if the server checks one.
+    :param oauth_provider: The authorization server that signs clients in, if they sign in with OAuth. It accepts
+        ``token`` too, as a bearer token.
     :return: The app.
     """
     app = server.streamable_http_app(stateless_http=True, json_response=json_response, host=host)
     app.add_route(HEALTH_PATH, _health, methods=["GET"], include_in_schema=False)
-    if token is None:
-        return app
+    app.add_route(FAVICON_PATH, _favicon, methods=["GET"], include_in_schema=False)
+    if oauth_provider is not None:
+        protected_app: ASGIApp = AuthorizationServerMetadataMiddleware(app, oauth_provider)
+    elif token is not None:
+        protected_app = BearerTokenMiddleware(app, token)
+    else:
+        protected_app = app
 
-    return BearerTokenMiddleware(app, token)
+    return ResponseHeadersMiddleware(protected_app, {"X-Muppets": "no strings attached"})
+
+
+class ResponseHeadersMiddleware:
+    """
+    Adds headers to every HTTP response.
+
+    :param app: The app.
+    :param headers: The headers to add.
+    """
+
+    def __init__(self,
+                 app: ASGIApp,
+                 headers: Dict[str, str]) -> None:
+        self.app = app
+        self._headers = [(name.lower().encode("latin-1"), value.encode("latin-1")) for name, value in headers.items()]
+
+    async def __call__(self,
+                       scope: Scope,
+                       receive: Receive,
+                       send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                message = {**message, "headers": [*message.get("headers", []), *self._headers]}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 class BearerTokenMiddleware:
     """
-    Requires ``Authorization: Bearer <token>`` on every HTTP request but the health check, and answers ``401`` to one
-    without it.
+    Requires ``Authorization: Bearer <token>`` on every HTTP request but those to :data:`PUBLIC_PATHS`, and answers
+    ``401`` to one without it.
 
     :param app: The app to protect.
     :param token: The bearer token.
@@ -615,7 +689,8 @@ class BearerTokenMiddleware:
         if scope["type"] == "websocket" and not self._authorized(Headers(scope=scope)):
             await WebSocketClose()(scope, receive, send)
             return
-        if scope["type"] == "http" and scope["path"] != HEALTH_PATH and not self._authorized(Headers(scope=scope)):
+        if (scope["type"] == "http" and scope["path"] not in PUBLIC_PATHS
+                and not self._authorized(Headers(scope=scope))):
             response = PlainTextResponse("Unauthorized", status_code=401, headers={"WWW-Authenticate": "Bearer"})
             await response(scope, receive, send)
             return
@@ -627,6 +702,20 @@ class BearerTokenMiddleware:
         scheme, _, token = headers.get("authorization", "").partition(" ")
 
         return scheme.lower() == "bearer" and hmac.compare_digest(token.strip().encode("utf-8"), self._token)
+
+
+def _is_remote_request(ctx: Context) -> bool:
+    """
+    Whether a request reached the server through a proxy or tunnel, so the user likely isn't at the machine it runs on.
+    """
+    headers = ctx.headers or {}
+
+    return any(name in headers for name in ("x-forwarded-for", "forwarded"))
+
+
+async def _favicon(request: Request) -> Response:
+    return FileResponse(os.path.join(os.path.dirname(__file__), "favicon.ico"), media_type="image/x-icon",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 async def _health(request: Request) -> Response:
@@ -765,8 +854,18 @@ def _parse_args(args: Optional[List[str]]) -> argparse.Namespace:
                         help="A file holding a bearer token that every HTTP request must carry, or set "
                              f"{AUTHORIZATION_ENVIRONMENT_VARIABLE} instead. Required unless --host is a loopback "
                              "address; there, no token is checked by default.")
+    parser.add_argument("--public-url",
+                        default=os.environ.get(PUBLIC_URL_ENVIRONMENT_VARIABLE, "").strip() or None,
+                        help="The server's public HTTPS URL (e.g. a tunnel's, https://<name>.ngrok-free.dev), to sign "
+                             "clients in with OAuth, each approved on a page that asks for the bearer token. Or set "
+                             f"{PUBLIC_URL_ENVIRONMENT_VARIABLE} instead.")
     parsed_args = parser.parse_args(args)
     parsed_args.token = _read_token(parser, parsed_args.token_file)
+    if parsed_args.public_url and parsed_args.transport != "streamable-http":
+        parser.error("--public-url only applies to --transport streamable-http.")
+    if parsed_args.public_url and not parsed_args.token:
+        parser.error(f"--public-url needs --token-file or {AUTHORIZATION_ENVIRONMENT_VARIABLE} too, since clients "
+                     "are approved with it.")
 
     if parsed_args.transport == "streamable-http" and parsed_args.host not in LOOPBACK_HOSTS and not parsed_args.token:
         parser.error(f"--host {parsed_args.host} can be reached from other machines, so set --token-file or "
@@ -801,11 +900,18 @@ def main(args: Optional[List[str]] = None) -> None:
     :param args: The command line arguments, by default the ones the server was started with.
     """
     parsed_args = _parse_args(args)
-    server = create_server()
+    saved_session = None
+    oauth_provider = None
+    if parsed_args.public_url:
+        config = AmazonOrdersConfig()
+        saved_session = SavedSession(config)
+        oauth_provider = OwnerOAuthProvider(parsed_args.public_url, parsed_args.token,
+                                            os.path.join(os.path.dirname(config.config_path), OAUTH_STATE_FILENAME))
+    server = create_server(saved_session, oauth_provider=oauth_provider)
     if parsed_args.transport == "stdio":
         server.run()
         return
 
     app = create_http_app(server, host=parsed_args.host, json_response=parsed_args.json_response,
-                          token=parsed_args.token)
+                          token=parsed_args.token, oauth_provider=oauth_provider)
     uvicorn.run(app, host=parsed_args.host, port=parsed_args.port, log_level=server.settings.log_level.lower())

@@ -1,4 +1,4 @@
-.PHONY: all install nopyc clean test check schema local validate-release mcpb server-json
+.PHONY: all install nopyc clean test docs check schema local validate-release mcpb server-json
 
 SHELL := /usr/bin/env bash
 PYTHON_BIN ?= python
@@ -29,6 +29,13 @@ test: install
 		source $(PROJECT_VENV)/bin/activate; \
 		python -m pip install ".[dev]"; \
 		coverage run -m pytest -v && coverage report && coverage xml && coverage html; \
+	)
+
+docs: install
+	@( \
+		source $(PROJECT_VENV)/bin/activate; \
+		python -m pip install ".[docs]"; \
+		sphinx-build -M html docs build/docs -n -E; \
 	)
 
 check: install

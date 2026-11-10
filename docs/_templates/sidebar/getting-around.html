@@ -1,0 +1,14 @@
+<div class="sidebar-tree">
+<p class="caption" role="heading"><span class="caption-text">Getting Around</span></p>
+<ul>
+    <li class="toctree-l1{% if pagename == master_doc %} current current-page{% endif %}"><a class="reference internal" href="{{ pathto(master_doc) }}">Basic Usage</a></li>
+    <li class="toctree-l1"><a class="reference internal" href="{{ '' if pagename == master_doc else pathto(master_doc) }}#dive-deeper">Dive Deeper</a>
+        <ul>
+            <li class="toctree-l2{% if pagename == "remote" %} current current-page{% endif %}"><a class="reference internal" href="{{ pathto("remote") }}">Remote Clients</a></li>
+            <li class="toctree-l2{% if pagename == "api" %} current current-page{% endif %}"><a class="reference internal" href="{{ pathto("api") }}">API Documentation</a></li>
+            <li class="toctree-l2"><a class="reference external" href="https://github.com/alexdlaird/amazon-orders-mcp/blob/main/CHANGELOG.md">Changelog</a></li>
+            <li class="toctree-l2"><a class="reference external" href="https://github.com/alexdlaird/amazon-orders-mcp/issues">Issues</a></li>
+        </ul>
+    </li>
+</ul>
+</div>

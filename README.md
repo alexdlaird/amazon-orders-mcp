@@ -3,6 +3,7 @@
 [![Version](https://img.shields.io/pypi/v/amazon-orders-mcp)](https://pypi.org/project/amazon-orders-mcp)
 [![Python Versions](https://img.shields.io/pypi/pyversions/amazon-orders-mcp.svg)](https://pypi.org/project/amazon-orders-mcp)
 [![Build](https://img.shields.io/github/actions/workflow/status/alexdlaird/amazon-orders-mcp/build.yml)](https://github.com/alexdlaird/amazon-orders-mcp/actions/workflows/build.yml)
+[![Docs](https://img.shields.io/readthedocs/amazon-orders-mcp)](https://amazon-orders-mcp.readthedocs.io)
 [![GitHub License](https://img.shields.io/github/license/alexdlaird/amazon-orders-mcp)](https://github.com/alexdlaird/amazon-orders-mcp/blob/main/LICENSE)
 
 <!-- mcp-name: io.github.alexdlaird/amazon-orders-mcp -->
@@ -13,7 +14,7 @@ tools for your Amazon account, available from any MCP client.
 
 The server never sees your credentials. When you sign in, a browser window opens on Amazon's own page, and the server
 reuses the session that leaves behind. It also runs on a server without a display, where you sign in from a terminal
-instead (see [Remote Clients](#remote-clients)).
+instead (see [Remote Clients](https://amazon-orders-mcp.readthedocs.io/remote.html)).
 
 > **Note:** This server reads its data through `amazon-orders`, which works by parsing data from Amazon's
 > consumer-facing website. As Amazon provides no official API to use, older versions may break at any time, so it's
@@ -65,15 +66,8 @@ installed it with `pip install amazon-orders-mcp`:
 ### Remote Clients
 
 For clients that connect to a server instead of running one, the server can also serve
-[Streamable HTTP](https://modelcontextprotocol.io/specification/latest/basic/transports/streamable-http):
-
-```sh
-uvx amazon-orders-mcp --transport streamable-http
-```
-
-It listens at `http://127.0.0.1:8000/mcp`. See `--help` to change that, or to require a bearer token (required off
-loopback). On a server without a display, `sign_in` can't open a browser window, so sign in there first with
-`uvx amazon-orders login`, which asks for your username and password instead.
+[Streamable HTTP](https://modelcontextprotocol.io/specification/latest/basic/transports/streamable-http), and sign
+them in with OAuth. See [Remote Clients](https://amazon-orders-mcp.readthedocs.io/remote.html) for how.
 
 ### Docker
 
@@ -119,8 +113,11 @@ with. Settings are shared with the `amazon-orders` CLI, so it follows the same c
 
 ## Documentation
 
+For more advanced usage, `amazon-orders-mcp`'s official documentation is available
+at [Read the Docs](https://amazon-orders-mcp.readthedocs.io).
+
 For more on the data the server returns, `amazon-orders`'s official documentation is available
-at [Read the Docs](http://amazon-orders.readthedocs.io), including the
+at [Read the Docs](https://amazon-orders.readthedocs.io), including the
 [Order](https://amazon-orders.readthedocs.io/api.html#amazonorders.entity.order.Order) entity's fields
 and [troubleshooting](https://amazon-orders.readthedocs.io/troubleshooting.html).
 

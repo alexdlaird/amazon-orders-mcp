@@ -6,6 +6,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.1.3...HEAD)
 
+### Added
+
+- OAuth sign-in over Streamable HTTP with `--public-url` (or `AMAZON_ORDERS_MCP_PUBLIC_URL`): clients register themselves, and each is approved with the server's bearer token, which still works on its own.
+- The server's icon, for clients that show one.
+
+### Changed
+
+- `sign_in` called through a proxy or tunnel says where to sign in, instead of opening a browser window where the server runs.
+
 ## [2.1.3](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.1.2...2.1.3) - 2026-11-09
 
 ### Fixed
