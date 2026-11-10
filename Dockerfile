@@ -9,6 +9,9 @@
 #   docker run -d -p 127.0.0.1:8000:8000 -e AMAZON_ORDERS_MCP_TOKEN \
 #       -v amazon-orders:/home/app/.config/amazonorders amazon-orders-mcp --transport streamable-http --host 0.0.0.0
 #
+# To sign clients in with OAuth, also pass `-e AMAZON_ORDERS_MCP_PUBLIC_URL`, the server's public HTTPS URL
+# (https://amazon-orders-mcp.readthedocs.io/remote.html).
+#
 # There's no display for `sign_in`, so sign in with `amazon-orders login` in a one-off container on the same volume.
 # The server picks up the new session on its next call:
 #
