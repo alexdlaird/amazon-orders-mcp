@@ -6,11 +6,19 @@ amazon-orders-mcp - An MCP server for Amazon order history, line items, and tran
 
 .. only:: html
 
-   .. image:: _html/_images/logo.png
+   .. image:: https://amazon-orders.readthedocs.io/_static/logo-light.png
       :alt: amazon-orders-mcp - An MCP server for Amazon order history, line items, and transactions
       :align: center
-      :width: 360px
-      :class: hero-logo
+      :width: 560px
+      :class: hero-logo only-light
+
+   .. image:: https://amazon-orders.readthedocs.io/_static/logo-dark.png
+      :alt: amazon-orders-mcp - An MCP server for Amazon order history, line items, and transactions
+      :align: center
+      :width: 560px
+      :class: hero-logo only-dark
+
+|
 
 .. only:: builder_html
 
