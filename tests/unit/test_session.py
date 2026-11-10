@@ -8,6 +8,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 from amazonorders.conf import AmazonOrdersConfig
+from amazonorders.session import AmazonSession
 from amazonorders.exception import AmazonOrdersAuthError, AmazonOrdersError
 
 from amazonorders_mcp.session import SavedSession, StderrIO
@@ -24,6 +25,119 @@ class TestSession(UnitTestCase):
 
         # THEN
         self.assertEqual([], amazon_session.auth_forms)
+
+    def test_callback_can_use_a_signed_out_session_and_return_a_result(self):
+        # WHEN
+        result = self.saved_session.run_with_session(
+            lambda session: (session.is_authenticated, session.config.site, session.auth_forms),
+            "https://www.amazon.de")
+
+        # THEN
+        self.assertEqual((False, "amazon.de", []), result)
+        self.assertEqual(0, len(self.responses.calls))
+        with self.assertRaises(AmazonOrdersAuthError):
+            self.saved_session.run(lambda session: None, "amazon.de")
+
+    def test_callback_uses_the_configured_default_site(self):
+        # GIVEN
+        self.saved_session.update_config("domain", "amazon.de", save=False)
+
+        # WHEN
+        site = self.saved_session.run_with_session(lambda session: session.config.site)
+
+        # THEN
+        self.assertEqual("amazon.de", site)
+
+    def test_callback_rejects_an_unknown_site_before_running(self):
+        # WHEN
+        with self.assertRaises(AmazonOrdersError):
+            self.saved_session.run_with_session(lambda session: self.fail("Callback ran"), "example.com")
+
+    def test_callback_saves_are_reused_after_success_or_failure(self):
+        for fails in (False, True):
+            with self.subTest(fails=fails):
+                # GIVEN
+                self.saved_session = SavedSession(self.test_config)
+                url = "https://www.amazon.com/synthetic-session"
+                self.responses.get(url, body="saved")
+
+                def save(session):
+                    cookie_name = session.config.constants.COOKIES_SET_WHEN_AUTHENTICATED[0]
+                    session.session.cookies.set(cookie_name, "synthetic-session")
+                    session.get(url, persist_cookies=True)
+                    session.is_authenticated = True
+                    if fails:
+                        raise RuntimeError("Callback failed after saving")
+                    return session
+
+                # WHEN
+                if fails:
+                    with self.assertRaisesRegex(RuntimeError, "Callback failed after saving"):
+                        self.saved_session.run_with_session(save)
+                else:
+                    saved = self.saved_session.run_with_session(save)
+                    self.assertIs(saved, self.saved_session.run(lambda session: session))
+
+                # THEN
+                self.assertTrue(self.saved_session.run(lambda session: session.auth_cookies_stored()))
+                fresh = AmazonSession(config=self.test_config)
+                self.assertTrue(fresh.auth_cookies_stored())
+
+    def test_callback_is_not_retried_on_an_authentication_error(self):
+        # GIVEN
+        calls = []
+
+        def fail(session):
+            calls.append(session)
+            raise AmazonOrdersAuthError("Callback failed")
+
+        # WHEN
+        with self.assertRaisesRegex(AmazonOrdersAuthError, "Callback failed"):
+            self.saved_session.run_with_session(fail)
+
+        # THEN
+        self.assertEqual(1, len(calls))
+        self.assertFalse(self.saved_session.run_with_session(lambda session: session.is_authenticated))
+
+    def test_callback_blocks_same_site_calls_but_not_other_sites(self):
+        # GIVEN
+        self.given_saved_session("amazon.com", "amazon.de")
+        callback_started, release_callback, same_site_started, same_site_done = (
+            threading.Event() for _ in range(4))
+        results = []
+
+        def callback(session):
+            callback_started.set()
+            results.append(release_callback.wait(5))
+
+        def same_site_call():
+            same_site_started.set()
+            self.saved_session.run(lambda session: same_site_done.set())
+
+        callback_thread = threading.Thread(target=lambda: self.saved_session.run_with_session(callback))
+        callback_thread.start()
+        same_site_thread = threading.Thread(target=same_site_call)
+        try:
+            self.assertTrue(callback_started.wait(5))
+            same_site_thread.start()
+            self.assertTrue(same_site_started.wait(5))
+
+            # WHEN
+            other_site = self.saved_session.run(lambda session: session.config.site, "amazon.de")
+
+            # THEN
+            self.assertEqual("amazon.de", other_site)
+            self.assertFalse(same_site_done.wait(0.1))
+        finally:
+            release_callback.set()
+            callback_thread.join(5)
+            if same_site_thread.ident is not None:
+                same_site_thread.join(5)
+
+        self.assertEqual([True], results)
+        self.assertTrue(same_site_done.is_set())
+        self.assertFalse(callback_thread.is_alive())
+        self.assertFalse(same_site_thread.is_alive())
 
     def test_echo_writes_to_stderr(self):
         # GIVEN
