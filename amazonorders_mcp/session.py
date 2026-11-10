@@ -38,9 +38,8 @@ PREFERENCE_KEYS: Tuple[str, ...] = ("domain", "browser")
 
 #: The config keys the assistant may adjust when calls keep failing, for this server run unless saved.
 TUNING_KEYS: Tuple[str, ...] = ("request_timeout", "browser_timeout", "thread_pool_size", "connection_pool_size",
-                                "max_auth_attempts", "max_auth_retries", "max_cookie_attempts",
-                                "cookie_reattempt_wait", "auth_reattempt_wait", "bs4_parser",
-                                "warn_on_missing_required_field")
+                                "max_auth_attempts", "max_cookie_attempts", "cookie_reattempt_wait",
+                                "auth_reattempt_wait", "bs4_parser", "warn_on_missing_required_field")
 
 T = TypeVar("T")
 

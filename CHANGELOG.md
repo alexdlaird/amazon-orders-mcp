@@ -13,6 +13,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- Paged tools return a batch of 10 results by default, instead of 25.
 - Documentation improvements.
 
 ## [2.2.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.2.0...2.2.1) - 2026-11-10

@@ -144,9 +144,6 @@ Just ask your assistant about your orders, and it will use the following tools:
    * - ``update_config``
      - Changes one of those settings
 
-Order history and transactions come back in batches of ``limit`` results (25 by default, and a batch can run up to a
-page over), with a ``cursor`` your assistant passes back to get the next batch.
-
 For assistants that offer prompts, these are listed alongside the tools:
 
 .. list-table::

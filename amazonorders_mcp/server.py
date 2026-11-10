@@ -151,8 +151,9 @@ AUTOMATED_SIGN_IN_DOCS_URL = "https://amazon-orders.readthedocs.io/#automating-a
 #: How many seconds pass between the reports that keep a client waiting on ``sign_in``.
 SIGN_IN_REPORT_INTERVAL = 5
 
-#: How many results a paged tool collects when the client doesn't say, so a bare call stays bounded.
-DEFAULT_LIMIT = 25
+#: How many results a paged tool collects when the client doesn't say, so a bare call stays bounded: one page of
+#: Order history.
+DEFAULT_LIMIT = 10
 
 #: The transports the server runs over: ``stdio`` for a client that runs the server, and ``streamable-http`` for
 #: clients that connect to it.
