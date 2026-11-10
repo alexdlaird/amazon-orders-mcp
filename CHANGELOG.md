@@ -8,7 +8,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
-- `SavedSession.run_with_session()` runs a callback with a site's session, signed in or not, under its existing lock.
+- `SavedSession.run_with_session()`, to run a call with a site's session, signed in or not.
 
 ## [2.2.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.1.3...2.2.0) - 2026-11-10
 

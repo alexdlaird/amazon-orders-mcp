@@ -8,8 +8,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 from amazonorders.conf import AmazonOrdersConfig
-from amazonorders.session import AmazonSession
 from amazonorders.exception import AmazonOrdersAuthError, AmazonOrdersError
+from amazonorders.session import AmazonSession
 
 from amazonorders_mcp.session import SavedSession, StderrIO
 from tests.unittestcase import UnitTestCase
@@ -50,38 +50,51 @@ class TestSession(UnitTestCase):
 
     def test_callback_rejects_an_unknown_site_before_running(self):
         # WHEN
-        with self.assertRaises(AmazonOrdersError):
+        with self.assertRaises(AmazonOrdersError) as cm:
             self.saved_session.run_with_session(lambda session: self.fail("Callback ran"), "example.com")
 
-    def test_callback_saves_are_reused_after_success_or_failure(self):
-        for fails in (False, True):
-            with self.subTest(fails=fails):
-                # GIVEN
-                self.saved_session = SavedSession(self.test_config)
-                url = "https://www.amazon.com/synthetic-session"
-                self.responses.get(url, body="saved")
+        # THEN
+        self.assertIn("\"example.com\" isn't an Amazon site that can be read", str(cm.exception))
 
-                def save(session):
-                    cookie_name = session.config.constants.COOKIES_SET_WHEN_AUTHENTICATED[0]
-                    session.session.cookies.set(cookie_name, "synthetic-session")
-                    session.get(url, persist_cookies=True)
-                    session.is_authenticated = True
-                    if fails:
-                        raise RuntimeError("Callback failed after saving")
-                    return session
+    def test_callback_saves_are_reused_by_the_next_call(self):
+        # GIVEN
+        url = "https://www.amazon.com/synthetic-session"
+        self.responses.get(url, body="saved")
 
-                # WHEN
-                if fails:
-                    with self.assertRaisesRegex(RuntimeError, "Callback failed after saving"):
-                        self.saved_session.run_with_session(save)
-                else:
-                    saved = self.saved_session.run_with_session(save)
-                    self.assertIs(saved, self.saved_session.run(lambda session: session))
+        def save(session):
+            cookie_name = session.config.constants.COOKIES_SET_WHEN_AUTHENTICATED[0]
+            session.session.cookies.set(cookie_name, "synthetic-session")
+            session.get(url, persist_cookies=True)
+            session.is_authenticated = True
+            return session
 
-                # THEN
-                self.assertTrue(self.saved_session.run(lambda session: session.auth_cookies_stored()))
-                fresh = AmazonSession(config=self.test_config)
-                self.assertTrue(fresh.auth_cookies_stored())
+        # WHEN
+        saved = self.saved_session.run_with_session(save)
+
+        # THEN
+        self.assertIs(saved, self.saved_session.run(lambda session: session))
+        self.assertTrue(self.saved_session.run(lambda session: session.auth_cookies_stored()))
+        self.assertTrue(AmazonSession(config=self.test_config).auth_cookies_stored())
+
+    def test_callback_saves_are_reused_after_it_raises(self):
+        # GIVEN
+        url = "https://www.amazon.com/synthetic-session"
+        self.responses.get(url, body="saved")
+
+        def save_then_fail(session):
+            cookie_name = session.config.constants.COOKIES_SET_WHEN_AUTHENTICATED[0]
+            session.session.cookies.set(cookie_name, "synthetic-session")
+            session.get(url, persist_cookies=True)
+            session.is_authenticated = True
+            raise RuntimeError("Callback failed after saving")
+
+        # WHEN
+        with self.assertRaisesRegex(RuntimeError, "Callback failed after saving"):
+            self.saved_session.run_with_session(save_then_fail)
+
+        # THEN
+        self.assertTrue(self.saved_session.run(lambda session: session.auth_cookies_stored()))
+        self.assertTrue(AmazonSession(config=self.test_config).auth_cookies_stored())
 
     def test_callback_is_not_retried_on_an_authentication_error(self):
         # GIVEN

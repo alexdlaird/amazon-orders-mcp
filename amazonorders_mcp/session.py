@@ -109,13 +109,14 @@ class SavedSession:
                          call: Callable[[AmazonSession], T],
                          site: Optional[str] = None) -> T:
         """
-        Run a callback with a site's session, signed in or not, under the same lock as other calls to that site.
-        The callback decides whether to sign in or check authentication. Any session it saves is used by the next
-        call, even if the callback raises. The callback must not call back into this ``SavedSession``.
+        Run a call with a site's session, signed in or not. Like :meth:`run`, other calls to the site wait until it's
+        done, but it's never retried, and what it does with the session is up to it. Anything it saves to the session
+        is used by the next call, even if it raises. It can't call back into this ``SavedSession``, since it would wait
+        on itself.
 
-        :param call: The callback to run with the session.
+        :param call: The call to make with the session.
         :param site: The Amazon site (e.g. ``amazon.de``), by default the config's ``domain``.
-        :return: The callback's result.
+        :return: The call's result.
         :raises AmazonOrdersError: If the site isn't an Amazon site that can be read.
         """
         site_session = self._site_session(site)
@@ -390,6 +391,7 @@ class _SiteSession:
             return call(amazon_session)
         finally:
             self._loaded_cookie_jar_mtime = amazon_session.cookie_jar_mtime
+            self._reuse_only(amazon_session)
 
     def sign_in(self,
                 amazon_session: AmazonSession,
