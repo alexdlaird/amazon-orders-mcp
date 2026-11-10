@@ -84,6 +84,7 @@ Just ask your assistant about your orders, and it will use the following tools:
 
 | Tool                 | Returns                                                                   |
 |----------------------|---------------------------------------------------------------------------|
+| `find_charge`        | The transactions behind a card or bank charge, each with its order        |
 | `sign_in`            | Opens a browser window for you to sign in to Amazon, when you ask         |
 | `get_orders`         | A batch of orders by year, time filter or order type, optionally detailed |
 | `search_orders`      | A batch of items by product, order number, address or recipient, any year |
@@ -99,6 +100,15 @@ Just ask your assistant about your orders, and it will use the following tools:
 
 Order history and transactions come back in batches of `limit` results (25 by default, and a batch can run up to a
 page over), with a `cursor` your assistant passes back to get the next batch.
+
+For assistants that offer prompts, these are listed alongside the tools:
+
+| Prompt             | Does                                                                |
+|--------------------|---------------------------------------------------------------------|
+| `review_spending`  | Reviews what you've spent over a period, grouped by what it was for |
+| `find_returns`     | Finds items in recent orders you can still return                   |
+| `track_deliveries` | Lists what you have arriving, soonest first                         |
+| `explain_charge`   | Works out what an Amazon charge on your statement was               |
 
 Every tool that reads Amazon takes an optional `site`, like `amazon.de`, so your assistant can read each Amazon site
 you shop on from one server, e.g. "my last amazon.de orders". Without it, tools read your default site, the `domain`

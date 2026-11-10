@@ -6,6 +6,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.2.1...HEAD)
 
+### Added
+
+- `find_charge`, the Amazon Transactions behind a card or bank charge, each with its Order and Items.
+- The `review_spending`, `find_returns`, `track_deliveries` and `explain_charge` prompts.
+
+### Changed
+
+- Documentation improvements.
+
 ## [2.2.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.2.0...2.2.1) - 2026-11-10
 
 ### Added
