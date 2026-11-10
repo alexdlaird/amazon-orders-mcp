@@ -117,6 +117,8 @@ Just ask your assistant about your orders, and it will use the following tools:
 
    * - Tool
      - Returns
+   * - ``find_charge``
+     - The transactions behind a card or bank charge, each with its order
    * - ``sign_in``
      - Opens a browser window for you to sign in to Amazon, when you ask
    * - ``get_orders``
@@ -142,8 +144,21 @@ Just ask your assistant about your orders, and it will use the following tools:
    * - ``update_config``
      - Changes one of those settings
 
-Order history and transactions come back in batches of ``limit`` results (25 by default, and a batch can run up to a
-page over), with a ``cursor`` your assistant passes back to get the next batch.
+For assistants that offer prompts, these are listed alongside the tools:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Prompt
+     - Does
+   * - ``review_spending``
+     - Reviews what you've spent over a period, grouped by what it was for
+   * - ``find_returns``
+     - Finds items in recent orders you can still return
+   * - ``track_deliveries``
+     - Lists what you have arriving, soonest first
+   * - ``explain_charge``
+     - Works out what an Amazon charge on your statement was
 
 Every tool that reads Amazon takes an optional ``site``, like ``amazon.de``, so your assistant can read each Amazon site
 you shop on from one server, e.g. "my last amazon.de orders". Without it, tools read your default site, the ``domain``
@@ -156,6 +171,18 @@ Ask your assistant to change a setting, such as the default Amazon site (e.g. ``
 in with. Settings are shared with the ``amazon-orders`` CLI, so it follows the same changes. See
 `Supported Sites <https://amazon-orders.readthedocs.io/language-packages.html#supported-sites>`_ for the sites
 ``amazon-orders`` can read.
+
+Budgeting Apps
+--------------
+
+Your assistant can use ``find_charge`` alongside your budgeting app's own connector to work out what each Amazon charge
+in your budget was, e.g. "what were my Amazon charges last week for?" ``amazon-orders-mcp`` only ever reads Amazon, so
+any change to your budget is made by your budgeting app's connector.
+
+A charge can show in your budget on a different day than Amazon completed it, so ``find_charge`` matches Transactions
+completed within a few days of the charge's date (``window_days``), and it ignores the amount's sign, since budgets and
+Amazon show charges and refunds with different signs. If you pay with more than one card, give the card's last four
+digits. For one charge at a time, the ``explain_charge`` prompt walks your assistant through it.
 
 Dive Deeper
 ===========

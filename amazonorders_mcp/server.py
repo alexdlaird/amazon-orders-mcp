@@ -6,7 +6,7 @@ import hmac
 import json
 import logging
 import os
-from datetime import date
+from datetime import date, timedelta
 from functools import partial
 from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, TypeVar, Union, cast
 
@@ -46,6 +46,7 @@ from amazonorders_mcp.oauth import (
     OwnerOAuthProvider,
 )
 from amazonorders_mcp.schema import (
+    ChargeMatches,
     FamilyMemberList,
     GiftCardsPage,
     InvoiceList,
@@ -82,7 +83,8 @@ INSTRUCTIONS = (
     "default site unless given another as `site`, so pass the site an order was placed on, and `check_session` "
     "says which sites the user is signed in to. "
     "For what the user spent, use `get_transactions`, the charges and refunds as they posted, rather than adding up "
-    "order totals. Each site's amounts are in its own currency, so total each site separately. "
+    "order totals. Each site's amounts are in its own currency, so total each site separately. To find what a card "
+    "or bank charge was, use `find_charge` with its amount and date. "
     "For what's arriving, get recent orders (`time_filter` `last30`) and read each shipment's `delivery_status`; "
     "`get_tracking` gives a shipment's carrier and tracking number. "
     "Answer with what the user asked for, summarized, and repeat addresses or payment details only when they ask. "
@@ -90,6 +92,40 @@ INSTRUCTIONS = (
     "sign them in with `sign_in`, and call it only once they agree. If that can't work, they can run "
     f"`{SIGN_IN_COMMAND}` in a terminal instead."
 )
+
+#: The ``review_spending`` prompt.
+SPENDING_PROMPT = (
+    "Review what I've spent on Amazon over a period I give you, and ask me for one if I haven't. Use "
+    "`get_transactions` for what was charged and refunded, and the Orders behind those charges for what was bought, "
+    "then group my spending by what it was for (e.g. groceries, household, electronics). Total each Amazon site "
+    "separately, since each is in its own currency. Point out anything that stands out, like a large charge, a "
+    "repeat purchase, or a recurring one, and only read as far back as the period needs."
+)
+
+#: The ``find_returns`` prompt.
+RETURNS_PROMPT = (
+    "Find the Items in my recent Amazon orders that I can still return. Use `get_orders` with `full_details` for my "
+    "recent orders, and list the Items whose `return_eligible_date` hasn't passed, the soonest to close first, each "
+    "with its Order number and the date its return window closes."
+)
+
+#: The ``track_deliveries`` prompt.
+DELIVERIES_PROMPT = (
+    "Tell me what I have arriving from Amazon. Use `get_orders` with `time_filter` `last30` for my recent orders, "
+    "and list each shipment that hasn't been delivered yet, the soonest to arrive first, with its `delivery_status` "
+    "and what's in it. For any I ask about, `get_tracking` gives its carrier and tracking number."
+)
+
+#: The ``explain_charge`` prompt.
+CHARGE_PROMPT = (
+    "Help me work out what an Amazon charge on my card or bank statement was. Ask me for its amount and date, and "
+    "the card's last four digits if I know them, then use `find_charge` and tell me what was bought and in which "
+    "Order. If more than one Transaction matches, show me each so I can tell which it is."
+)
+
+#: How many days either side of a charge's date ``find_charge`` matches Transactions by default, since Amazon
+#: completes a charge on a different day than a statement can show it.
+CHARGE_WINDOW_DAYS = 3
 
 #: What ``get_invoices`` adds to links it returns, since not every client applies ``INSTRUCTIONS``, but each reads the
 #: tool's result.
@@ -115,8 +151,9 @@ AUTOMATED_SIGN_IN_DOCS_URL = "https://amazon-orders.readthedocs.io/#automating-a
 #: How many seconds pass between the reports that keep a client waiting on ``sign_in``.
 SIGN_IN_REPORT_INTERVAL = 5
 
-#: How many results a paged tool collects when the client doesn't say, so a bare call stays bounded.
-DEFAULT_LIMIT = 25
+#: How many results a paged tool collects when the client doesn't say, so a bare call stays bounded: one page of
+#: Order history.
+DEFAULT_LIMIT = 10
 
 #: The transports the server runs over: ``stdio`` for a client that runs the server, and ``streamable-http`` for
 #: clients that connect to it.
@@ -241,6 +278,57 @@ def create_server(saved_session: Optional[SavedSession] = None,
             logger.debug(f"Tool call failed: {e}")
 
             raise ToolError(_describe_error(e)) from e
+
+    @server.tool(annotations=READ_ONLY,
+                 description="Find the Amazon Transactions behind a card or bank charge, by its amount and date, each "
+                             "with its Order and the Items in it. A Transaction matches when its amount equals "
+                             "`amount` and it completed within `window_days` of `charge_date`, since Amazon can "
+                             "complete a charge on a different day than a statement shows it.")
+    async def find_charge(
+            ctx: Context,
+            amount: Annotated[float, Field(
+                description="The charge or refund's amount, e.g. `12.99`. Its sign is ignored, since statements and "
+                            "Amazon show charges and refunds with different signs.")],
+            charge_date: Annotated[date, Field(description="The date the charge shows, e.g. `2026-11-10`.")],
+            last_four: Annotated[Optional[str], Field(
+                description="The last four digits of the card it was charged to, to match only that card's "
+                            "Transactions.")] = None,
+            window_days: Annotated[int, Field(
+                description="How many days either side of `charge_date` a Transaction can have completed.")
+            ] = CHARGE_WINDOW_DAYS,
+            site: Annotated[Optional[str], SITE] = None
+    ) -> ChargeMatches:
+        progress = _progress_reporter(ctx, "Transactions")
+
+        def find(amazon_session: AmazonSession) -> List[Dict[str, Any]]:
+            earliest = charge_date - timedelta(days=window_days)
+            transactions = AmazonTransactions(amazon_session).get_transactions(
+                days=max((date.today() - earliest).days + 1, 1), progress=progress)
+
+            orders: Dict[str, Order] = {}
+            matches = []
+            for transaction in transactions:
+                if not _matches_charge(transaction, amount, charge_date, window_days, last_four):
+                    continue
+                match = transaction.to_dict(exclude_none=True)
+                if transaction.order_number:
+                    if transaction.order_number not in orders:
+                        orders[transaction.order_number] = AmazonOrders(amazon_session).get_order(
+                            transaction.order_number)
+                    match["order"] = orders[transaction.order_number].to_dict(exclude_none=True)
+                matches.append(match)
+
+            return matches
+
+        matches = await run(find, site)
+
+        result: Dict[str, Any] = {"items": matches}
+        if not matches:
+            card = f" on the card ending in {last_four}" if last_four else ""
+            result["note"] = (f"No Transaction of {abs(amount):.2f} completed within {window_days} days of "
+                              f"{charge_date.isoformat()}{card}. A larger `window_days`, or another `site`, may "
+                              "find it.")
+        return ChargeMatches.model_validate(result)
 
     @server.tool(annotations=SIGN_IN,
                  description="Sign the user in to Amazon, when they ask you to or after a tool says they aren't "
@@ -522,6 +610,26 @@ def create_server(saved_session: Optional[SavedSession] = None,
 
         return ConfigValue(key=key, value=new_value, saved=saved)
 
+    @server.prompt(title="Review Amazon spending",
+                   description="Review what you've spent on Amazon over a period, grouped by what it was for.")
+    def review_spending() -> str:
+        return SPENDING_PROMPT
+
+    @server.prompt(title="Find returnable orders",
+                   description="Find the Items in your recent Amazon orders you can still return.")
+    def find_returns() -> str:
+        return RETURNS_PROMPT
+
+    @server.prompt(title="What's arriving",
+                   description="See what you have arriving from Amazon, and when.")
+    def track_deliveries() -> str:
+        return DELIVERIES_PROMPT
+
+    @server.prompt(title="Explain a charge",
+                   description="Work out what an Amazon charge on your card or bank statement was.")
+    def explain_charge() -> str:
+        return CHARGE_PROMPT
+
     return server
 
 
@@ -539,6 +647,16 @@ class AmazonOrdersServer(MCPServer):
                 tool.output_schema = _inline_definitions(tool.output_schema)
                 _drop_field_titles(tool.output_schema)
         return tools
+
+
+def _matches_charge(transaction: Transaction,
+                    amount: float,
+                    charge_date: date,
+                    window_days: int,
+                    last_four: Optional[str]) -> bool:
+    return (round(abs(transaction.grand_total), 2) == round(abs(amount), 2)
+            and abs((transaction.completed_date - charge_date).days) <= window_days
+            and (last_four is None or transaction.payment_method_last_4 == last_four))
 
 
 def _inline_definitions(schema: Dict[str, Any]) -> Dict[str, Any]:

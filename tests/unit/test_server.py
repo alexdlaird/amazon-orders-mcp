@@ -4,8 +4,8 @@ __license__ = "MIT"
 import inspect
 import json
 import os
-from datetime import date
-from unittest.mock import ANY, patch
+from datetime import date, timedelta
+from unittest.mock import ANY, MagicMock, patch
 
 import responses
 from amazonorders.exception import AmazonOrdersAuthRedirectError, AmazonOrdersError, AmazonOrdersUnavailableError
@@ -17,8 +17,8 @@ from amazonorders.transactions import AmazonTransactions
 from mcp.client import Client
 
 from amazonorders_mcp.schema import SCHEMA
-from amazonorders_mcp.server import AUTOMATED_SIGN_IN_DOCS_URL, DEFAULT_LIMIT, INSTRUCTIONS, INVOICE_LINKS_NOTE, \
-    create_server
+from amazonorders_mcp.server import AUTOMATED_SIGN_IN_DOCS_URL, CHARGE_PROMPT, CHARGE_WINDOW_DAYS, DEFAULT_LIMIT, \
+    DELIVERIES_PROMPT, INSTRUCTIONS, INVOICE_LINKS_NOTE, RETURNS_PROMPT, SPENDING_PROMPT, create_server
 from amazonorders_mcp.session import HEADLESS_SIGN_IN_COMMAND, SIGN_IN_COMMAND, SIGN_IN_TIMEOUT
 from tests.unittestcase import UnitTestCase
 
@@ -76,7 +76,7 @@ class TestServer(UnitTestCase):
         # THEN
         self.assertEqual({"check_session", "sign_in", "get_config", "update_config", "get_orders", "get_order",
                           "search_orders", "get_family_members", "get_tracking", "get_invoices", "get_transactions",
-                          "get_gift_cards", "get_prime_payments"},
+                          "find_charge", "get_gift_cards", "get_prime_payments"},
                          {tool.name for tool in tools})
         for tool in tools:
             if tool.name in ("sign_in", "update_config"):
@@ -640,6 +640,144 @@ class TestServer(UnitTestCase):
                          result.structured_content)
         mock_amazon_transactions.return_value.get_transactions_page.assert_called_once_with(
             days=30, order_id=None, limit=DEFAULT_LIMIT, cursor=None, progress=ANY)
+
+    def given_transaction(self, grand_total, completed_date, order_number="112-0000000-0000001", last_four="1234"):
+        transaction = {"grand_total": grand_total, "completed_date": completed_date.isoformat(),
+                       "payment_method_last_4": last_four, "order_number": order_number}
+        return MagicMock(grand_total=grand_total, completed_date=completed_date, order_number=order_number,
+                         payment_method_last_4=last_four,
+                         **{"to_dict.return_value": {k: v for k, v in transaction.items() if v is not None}})
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    @patch("amazonorders_mcp.server.AmazonTransactions")
+    async def test_find_charge(self, mock_amazon_transactions, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        charge_date = date.today() - timedelta(days=10)
+        mock_amazon_transactions.return_value.get_transactions.return_value = [
+            self.given_transaction(-12.99, charge_date - timedelta(days=2)),
+            self.given_transaction(-13.99, charge_date, order_number="112-0000000-0000002"),
+            self.given_transaction(-12.99, charge_date - timedelta(days=CHARGE_WINDOW_DAYS + 1),
+                                   order_number="112-0000000-0000003"),
+        ]
+        mock_amazon_orders.return_value.get_order.return_value = self.given_entities(
+            {"order_number": "112-0000000-0000001", "items": [{"title": "Example Item"}]})[0]
+
+        # WHEN
+        result = await self.call_tool("find_charge", {"amount": -12.99, "charge_date": charge_date.isoformat()})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual({"items": [{"grand_total": -12.99,
+                                     "completed_date": (charge_date - timedelta(days=2)).isoformat(),
+                                     "payment_method_last_4": "1234", "order_number": "112-0000000-0000001",
+                                     "order": {"order_number": "112-0000000-0000001",
+                                               "items": [{"title": "Example Item"}]}}]},
+                         result.structured_content)
+        mock_amazon_transactions.return_value.get_transactions.assert_called_once_with(
+            days=10 + CHARGE_WINDOW_DAYS + 1, progress=ANY)
+        mock_amazon_orders.return_value.get_order.assert_called_once_with("112-0000000-0000001")
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    @patch("amazonorders_mcp.server.AmazonTransactions")
+    async def test_find_charge_matches_a_refund_whatever_its_sign(self, mock_amazon_transactions, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_transactions.return_value.get_transactions.return_value = [
+            self.given_transaction(12.99, date.today())]
+        mock_amazon_orders.return_value.get_order.return_value = self.given_entities(
+            {"order_number": "112-0000000-0000001"})[0]
+
+        # WHEN
+        result = await self.call_tool("find_charge", {"amount": -12.99, "charge_date": date.today().isoformat()})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual([12.99], [match["grand_total"] for match in result.structured_content["items"]])
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    @patch("amazonorders_mcp.server.AmazonTransactions")
+    async def test_find_charge_on_a_card(self, mock_amazon_transactions, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_transactions.return_value.get_transactions.return_value = [
+            self.given_transaction(-12.99, date.today(), order_number="112-0000000-0000001", last_four="1234"),
+            self.given_transaction(-12.99, date.today(), order_number="112-0000000-0000002", last_four="9876")]
+        mock_amazon_orders.return_value.get_order.return_value = self.given_entities(
+            {"order_number": "112-0000000-0000002"})[0]
+
+        # WHEN
+        result = await self.call_tool("find_charge", {"amount": 12.99, "charge_date": date.today().isoformat(),
+                                                      "last_four": "9876"})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual(["112-0000000-0000002"],
+                         [match["order_number"] for match in result.structured_content["items"]])
+
+    @patch("amazonorders_mcp.server.AmazonOrders")
+    @patch("amazonorders_mcp.server.AmazonTransactions")
+    async def test_find_charge_without_an_order_number(self, mock_amazon_transactions, mock_amazon_orders):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_transactions.return_value.get_transactions.return_value = [
+            self.given_transaction(-12.99, date.today(), order_number=None)]
+
+        # WHEN
+        result = await self.call_tool("find_charge", {"amount": 12.99, "charge_date": date.today().isoformat()})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertNotIn("order", result.structured_content["items"][0])
+        mock_amazon_orders.return_value.get_order.assert_not_called()
+
+    @patch("amazonorders_mcp.server.AmazonTransactions")
+    async def test_find_charge_without_a_match(self, mock_amazon_transactions):
+        # GIVEN
+        self.given_saved_session()
+        mock_amazon_transactions.return_value.get_transactions.return_value = [
+            self.given_transaction(-13.99, date(2026, 11, 10))]
+
+        # WHEN
+        result = await self.call_tool("find_charge", {"amount": 12.99, "charge_date": "2026-11-10",
+                                                      "last_four": "1234"})
+
+        # THEN
+        self.assertFalse(result.is_error)
+        self.assertEqual({"items": [],
+                          "note": f"No Transaction of 12.99 completed within {CHARGE_WINDOW_DAYS} days of 2026-11-10 "
+                                  "on the card ending in 1234. A larger `window_days`, or another `site`, may find "
+                                  "it."},
+                         result.structured_content)
+
+    async def test_find_charge_publishes_its_matches_with_their_orders(self):
+        # GIVEN
+        server = create_server(self.saved_session)
+
+        # WHEN
+        async with Client(server) as client:
+            tool = next(tool for tool in (await client.list_tools()).tools if tool.name == "find_charge")
+
+        # THEN
+        transaction = tool.output_schema["properties"]["items"]["items"]
+        self.assertEqual(SCHEMA["tools"]["get_transactions"]["output_schema"]["properties"]["items"]["items"]
+                         ["properties"]["grand_total"], transaction["properties"]["grand_total"])
+        self.assertNotIn("properties", transaction["properties"]["order"])
+        self.assertIn("`get_order`", transaction["properties"]["order"]["description"])
+
+    async def test_prompts(self):
+        # GIVEN
+        server = create_server(self.saved_session)
+
+        # WHEN
+        async with Client(server) as client:
+            listed = {prompt.name: prompt for prompt in (await client.list_prompts()).prompts}
+            texts = {name: (await client.get_prompt(name)).messages[0].content.text for name in listed}
+
+        # THEN
+        self.assertEqual({"review_spending": SPENDING_PROMPT, "find_returns": RETURNS_PROMPT,
+                          "track_deliveries": DELIVERIES_PROMPT, "explain_charge": CHARGE_PROMPT}, texts)
+        self.assertTrue(all(prompt.title and prompt.description for prompt in listed.values()))
 
     @patch("amazonorders_mcp.server.AmazonGiftCards")
     async def test_get_gift_cards(self, mock_amazon_gift_cards):
