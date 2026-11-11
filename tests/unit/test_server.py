@@ -75,7 +75,7 @@ class TestServer(UnitTestCase):
 
         # THEN
         self.assertEqual({"check_session", "sign_in", "get_config", "update_config", "get_orders", "get_order",
-                          "search_orders", "get_family_members", "get_tracking", "get_invoices", "get_transactions",
+                          "search_orders", "get_tracking", "get_invoices", "get_transactions",
                           "find_charge", "get_gift_cards", "get_prime_payments"},
                          {tool.name for tool in tools})
         for tool in tools:
@@ -108,7 +108,7 @@ class TestServer(UnitTestCase):
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
 
         # THEN
-        self.assertEqual({"get_orders", "get_family_members", "get_order", "search_orders", "get_tracking",
+        self.assertEqual({"get_orders", "get_order", "search_orders", "get_tracking",
                           "get_invoices", "get_transactions", "get_gift_cards", "get_prime_payments"},
                          set(SCHEMA["tools"]))
         for name, tool_schema in SCHEMA["tools"].items():
@@ -151,7 +151,6 @@ class TestServer(UnitTestCase):
             "search_orders": AmazonOrders.search_orders_page,
             "get_tracking": AmazonOrders.get_tracking,
             "get_invoices": AmazonOrders.get_invoices,
-            "get_family_members": AmazonOrders.get_family_members,
             "get_transactions": AmazonTransactions.get_transactions_page,
             "get_gift_cards": AmazonGiftCards.get_gift_cards_page,
             "get_prime_payments": AmazonPrime.get_prime_payments,
@@ -415,7 +414,7 @@ class TestServer(UnitTestCase):
         self.assertFalse(result.is_error)
         self.assertEqual([], result.structured_content["items"])
         self.assertIn(f"No orders so far in {date.today().year}", result.structured_content["note"])
-        self.assertIn("`digital-orders`", result.structured_content["note"])
+        self.assertIn("`digital`", result.structured_content["note"])
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_orders_with_none_for_a_year_only_mentions_digital_orders(self, mock_amazon_orders):
@@ -429,7 +428,7 @@ class TestServer(UnitTestCase):
         # THEN
         note = result.structured_content["note"]
         self.assertNotIn("No orders so far", note)
-        self.assertIn("`digital-orders`", note)
+        self.assertIn("`digital`", note)
 
     @patch("amazonorders_mcp.server.AmazonOrders")
     async def test_get_orders_with_every_filter_set_adds_no_note(self, mock_amazon_orders):
@@ -438,7 +437,7 @@ class TestServer(UnitTestCase):
         mock_amazon_orders.return_value.get_orders_page.return_value = PagedResults([], None)
 
         # WHEN
-        result = await self.call_tool("get_orders", {"year": 2019, "order_filter": "digital-orders"})
+        result = await self.call_tool("get_orders", {"year": 2019, "order_filter": "digital"})
 
         # THEN
         self.assertNotIn("note", result.structured_content)

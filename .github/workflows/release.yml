@@ -32,10 +32,10 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           ref: develop
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Regenerate schema
         id: regenerate
@@ -86,10 +86,10 @@ jobs:
         with:
           ref: ${{ needs.prereq.outputs.squash_commit_sha }}
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Build package
         run: make local
@@ -117,10 +117,10 @@ jobs:
         with:
           ref: ${{ needs.prereq.outputs.squash_commit_sha }}
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.13
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: make install

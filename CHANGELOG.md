@@ -6,6 +6,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.4.1...HEAD)
 
+### Added
+
+- Support for Python 3.14 and 3.15.
+- Documentation improvements.
+
+### Changed
+
+- **Breaking:** Requires `amazon-orders` 6.0.
+
+### Removed
+
+- **Breaking:** The deprecated `get_family_members`, use `get_orders`, whose `household_members` lists the same members.
+- **Breaking:** Support for Python 3.10. To use `amazon-orders-mcp` with Python 3.10, pin `amazon-orders-mcp<3`.
+
 ## [2.4.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.4.0...2.4.1) - 2026-11-11
 
 ### Changed
