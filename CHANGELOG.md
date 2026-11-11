@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.4.0...HEAD)
 
+### Added
+
+- Documentation improvements.
+
 ### Changed
 
 - **Breaking:** Requires `amazon-orders` 6.0.

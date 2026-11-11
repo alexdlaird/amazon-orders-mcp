@@ -735,7 +735,7 @@ def _empty_orders_note(year: Optional[int],
         places.append(f"No orders so far in {date.today().year}: pass `year` or `time_filter` for earlier ones.")
     if order_filter is None:
         places.append("Digital orders, like Kindle books, aren't in the default history: pass `order_filter` "
-                      "`digital-orders` for those.")
+                      "`digital` for those.")
     return " ".join(places) or None
 
 
