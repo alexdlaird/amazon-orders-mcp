@@ -13,8 +13,8 @@ authors = [{ name = "Alex Laird", email = "contact@alexlaird.com" }]
 maintainers = [{ name = "Alex Laird", email = "contact@alexlaird.com" }]
 requires-python = ">=3.10"
 dependencies = [
-    "amazon-auth>=0.3.0,<2",
-    "amazon-orders[browser]>=5.4.0,<6",
+    "amazon-auth>=1.0.0,<2",
+    "amazon-orders[browser]>=5.4.1,<6",
     "mcp>=2.3,<3",
 ]
 classifiers = [

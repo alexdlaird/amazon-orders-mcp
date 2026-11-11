@@ -9,7 +9,7 @@
 <!-- mcp-name: io.github.alexdlaird/amazon-orders-mcp -->
 
 `amazon-orders-mcp` is an unofficial [MCP](https://modelcontextprotocol.io) server for Amazon order history, line items,
-and transactions, built on [`amazon-orders`](https://github.com/alexdlaird/amazon-orders). It gives your AI assistant
+and transactions, built on [`amazon-orders`](https://amazon-orders.readthedocs.io). It gives your AI assistant
 tools for your Amazon account, available from any MCP client.
 
 The server never sees your credentials. When you sign in, a browser window opens on Amazon's own page, and the server
