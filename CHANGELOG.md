@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.3.0...HEAD)
+## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.4.0...HEAD)
+
+## [2.4.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.3.0...2.4.0) - 2026-11-11
+
+### Added
+
+- An optional `account` on every tool that reads Amazon, and the `account` setting, to read more than one Amazon account.
 
 ## [2.3.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.2.1...2.3.0) - 2026-11-10
 

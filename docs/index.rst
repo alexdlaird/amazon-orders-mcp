@@ -138,7 +138,7 @@ Just ask your assistant about your orders, and it will use the following tools:
    * - ``get_prime_payments``
      - Prime membership fee charges, each with its order number
    * - ``check_session``
-     - Whether you're signed in, on each Amazon site you have a session for
+     - Whether you're signed in, on each site and account you have a session for
    * - ``get_config``
      - The settings your assistant can change, and their values
    * - ``update_config``
@@ -164,11 +164,15 @@ Every tool that reads Amazon takes an optional ``site``, like ``amazon.de``, so 
 you shop on from one server, e.g. "my last amazon.de orders". Without it, tools read your default site, the ``domain``
 setting. Each site has its own sign-in, so ask your assistant to sign you in to each one.
 
+Tools also take an optional ``account``, so one server can read someone else's own Amazon account too, like a
+partner's, e.g. "what's arriving for my partner?". Ask your assistant to sign you in to it, with a name for it like
+``spouse``. Without it, tools read your default account, the ``account`` setting.
+
 Configuration
 -------------
 
-Ask your assistant to change a setting, such as the default Amazon site (e.g. ``amazon.co.uk``) or the browser to sign
-in with. Settings are shared with the ``amazon-orders`` CLI, so it follows the same changes. See
+Ask your assistant to change a setting, such as the default Amazon site (e.g. ``amazon.co.uk``), the default account,
+or the browser to sign in with. Settings are shared with the ``amazon-orders`` CLI, so it follows the same changes. See
 `Supported Sites <https://amazon-orders.readthedocs.io/language-packages.html#supported-sites>`_ for the sites
 ``amazon-orders`` can read.
 
