@@ -34,7 +34,7 @@ WAITING_TO_SIGN_IN_STATUS = "Waiting for the user to sign in to Amazon ..."
 SIGN_IN_TIMEOUT = 120
 
 #: The config keys that are the user's choice, changed only when they ask, and saved.
-PREFERENCE_KEYS: Tuple[str, ...] = ("domain", "browser")
+PREFERENCE_KEYS: Tuple[str, ...] = ("domain", "account", "browser")
 
 #: The config keys the assistant may adjust when calls keep failing, for this server run unless saved.
 TUNING_KEYS: Tuple[str, ...] = ("request_timeout", "browser_timeout", "thread_pool_size", "connection_pool_size",
@@ -74,10 +74,14 @@ class SavedSession:
     the same config, but for that site. ``amazon-orders`` keeps each site's session in its own cookie jar (e.g.
     ``cookies.amazon.de.json``), so ``uvx amazon-orders --domain amazon.de login`` signs in to a site from a terminal.
 
-    Calls to a site are serialized, since an :class:`~amazonorders.session.AmazonSession` isn't made for concurrent
-    use, but calls to different sites can run at the same time, since their sessions share nothing. After Amazon
-    rejects a site's session, it's loaded again from disk, so a sign-in saved meanwhile (e.g. by the CLI's ``login``)
-    is used, and the rejected call is retried once with it.
+    Each Amazon account the user signed in to, like a partner's own, has its own sessions the same way, one for each
+    site. The default account is the config's ``account``, and ``uvx amazon-orders --account spouse login`` signs in
+    to another from a terminal.
+
+    Calls to a site and account are serialized, since an :class:`~amazonorders.session.AmazonSession` isn't made for
+    concurrent use, but calls to different sites or accounts can run at the same time, since their sessions share
+    nothing. After Amazon rejects a session, it's loaded again from disk, so a sign-in saved meanwhile (e.g. by the
+    CLI's ``login``) is used, and the rejected call is retried once with it.
 
     :param config: The config to use, by default the same one the ``amazon-orders`` CLI uses.
     """
@@ -85,47 +89,52 @@ class SavedSession:
     def __init__(self,
                  config: Optional[AmazonOrdersConfig] = None) -> None:
         self.config: Optional[AmazonOrdersConfig] = config
-        self._site_sessions: Dict[str, _SiteSession] = {}
+        self._site_sessions: Dict[Tuple[str, str], _SiteSession] = {}
         self._lock = threading.Lock()
 
     def run(self,
             call: Callable[[AmazonSession], T],
-            site: Optional[str] = None) -> T:
+            site: Optional[str] = None,
+            account: Optional[str] = None) -> T:
         """
-        Run a call with a site's signed-in session.
+        Run a call with a site's signed-in session, for an account.
 
         :param call: The call to make with the signed-in session.
         :param site: The Amazon site (e.g. ``amazon.de``), by default the config's ``domain``.
+        :param account: The Amazon account (e.g. ``spouse``), by default the config's ``account``.
         :return: The call's result.
-        :raises AmazonOrdersAuthError: If there's no saved session for the site, or it has expired.
-        :raises AmazonOrdersError: If the site isn't an Amazon site that can be read.
+        :raises AmazonOrdersAuthError: If there's no saved session for the site and account, or it has expired.
+        :raises AmazonOrdersError: If the site isn't an Amazon site that can be read, or the account can't be read.
         """
-        site_session = self._site_session(site)
+        site_session = self._site_session(site, account)
         with site_session.lock:
             return site_session.run(call)
 
     def run_with_session(self,
                          call: Callable[[AmazonSession], T],
-                         site: Optional[str] = None) -> T:
+                         site: Optional[str] = None,
+                         account: Optional[str] = None) -> T:
         """
-        Run a call with a site's session, signed in or not. Like :meth:`run`, other calls to the site wait until it's
-        done, but it's never retried, and what it does with the session is up to it. Anything it saves to the session
-        is used by the next call, even if it raises. It can't call back into this ``SavedSession``, since it would wait
-        on itself.
+        Run a call with a site's session for an account, signed in or not. Like :meth:`run`, other calls to the site
+        and account wait until it's done, but it's never retried, and what it does with the session is up to it.
+        Anything it saves to the session is used by the next call, even if it raises. It can't call back into this
+        ``SavedSession``, since it would wait on itself.
 
         :param call: The call to make with the session.
         :param site: The Amazon site (e.g. ``amazon.de``), by default the config's ``domain``.
+        :param account: The Amazon account (e.g. ``spouse``), by default the config's ``account``.
         :return: The call's result.
-        :raises AmazonOrdersError: If the site isn't an Amazon site that can be read.
+        :raises AmazonOrdersError: If the site isn't an Amazon site that can be read, or the account can't be read.
         """
-        site_session = self._site_session(site)
+        site_session = self._site_session(site, account)
         with site_session.lock:
             return site_session.run_with_session(call)
 
     def sign_in(self,
                 timeout: int = SIGN_IN_TIMEOUT,
                 browser: Optional[str] = None,
-                site: Optional[str] = None) -> None:
+                site: Optional[str] = None,
+                account: Optional[str] = None) -> None:
         """
         Open a browser window for the user to sign in on Amazon's own page, then save the session. Credentials are
         never seen, and other calls to the site wait until the sign-in is done.
@@ -135,28 +144,33 @@ class SavedSession:
             Playwright browser type that isn't installed yet is downloaded first. By default, an installed Chrome,
             then Edge, or a Chromium that's been downloaded.
         :param site: The Amazon site to sign in to (e.g. ``amazon.de``), by default the config's ``domain``.
+        :param account: The Amazon account to sign in to (e.g. ``spouse``), by default the config's ``account``. An
+            account with no saved session yet is added.
         :raises AmazonOrdersBrowserNotInstalledError: If no browser is installed to sign in with.
         :raises AmazonOrdersError: If a browser can't be downloaded, or the sign-in isn't completed in time, or Amazon
             doesn't accept it.
         """
         site = self.site(site)
-        site_session = self._site_session(site)
+        account = self.account(account)
+        site_session = self._site_session(site, account)
         site_session.sign_in_status = WAITING_TO_SIGN_IN_STATUS
         if browser and browser != self.get_config()["preferences"]["browser"]:
             self.update_config("browser", browser)
 
-        self.run_with_session(lambda session: site_session.sign_in(session, timeout, browser), site)
+        self.run_with_session(lambda session: site_session.sign_in(session, timeout, browser), site, account)
 
     def sign_in_status(self,
-                       site: str) -> str:
+                       site: str,
+                       account: str) -> str:
         """
         Get what an ongoing :meth:`sign_in` is doing, for the client to show while it waits. It never waits for a
         lock, so it can be called from the server's event loop.
 
         :param site: The Amazon site being signed in to, named as :meth:`site` names it.
+        :param account: The Amazon account being signed in to, named as :meth:`account` names it.
         :return: The sign-in's status.
         """
-        site_session = self._site_sessions.get(site)
+        site_session = self._site_sessions.get((account, site))
 
         return site_session.sign_in_status if site_session else WAITING_TO_SIGN_IN_STATUS
 
@@ -179,8 +193,8 @@ class SavedSession:
         """
         Change a config key in :data:`PREFERENCE_KEYS` or :data:`TUNING_KEYS`, for every site's session. A saved
         change is made with the ``amazon-orders`` CLI's ``update-config`` command, so the CLI follows it. A ``domain``
-        is the default site, which must be an Amazon site ``amazon-orders`` knows. Each site keeps its own saved
-        session, so changing it signs nothing out.
+        is the default site, which must be an Amazon site ``amazon-orders`` knows, and an ``account`` the default
+        account. Each site and account keeps its own saved session, so changing either signs nothing out.
 
         :param key: The config key.
         :param value: The new value, read as the CLI reads it.
@@ -238,12 +252,44 @@ class SavedSession:
 
         return default_site if not site or site == default_site else _to_amazon_domain(site)
 
-    def sites(self) -> List[str]:
+    def account(self,
+                account: Optional[str] = None) -> str:
         """
-        Get the default site, then every other Amazon site that has a saved session (a cookie jar), signed in or not.
+        Get an Amazon account's name, the way accounts are named here.
 
-        :return: The sites' names.
+        :param account: The Amazon account (e.g. ``spouse``), by default (or if empty) the config's ``account``.
+        :return: The account's name.
         """
+        with self._lock:
+            default_account = self._config().account
+
+        return account.strip().lower() if account and account.strip() else default_account
+
+    def accounts(self) -> List[str]:
+        """
+        Get the default account, then every other Amazon account that has a saved session on any site, signed in or
+        not.
+
+        :return: The accounts' names.
+        """
+        with self._lock:
+            config = self._config()
+            if config.environment_value("account"):
+                return [config.account]
+
+            return config.accounts()
+
+    def sites(self,
+              account: Optional[str] = None) -> List[str]:
+        """
+        Get the default site, then every other Amazon site that has a saved session (a cookie jar) for an account,
+        signed in or not.
+
+        :param account: The Amazon account, by default the config's ``account``.
+        :return: The sites' names.
+        :raises AmazonOrdersError: If the account can't be read.
+        """
+        account = self.account(account)
         with self._lock:
             config = self._config()
             default_site = config.site
@@ -251,13 +297,14 @@ class SavedSession:
             if config.environment_value("domain"):
                 return sites
 
+            account_config = self._site_config(default_site, account)
             # One copy, moved from site to site, finds each site's cookie jar as amazon-orders names it
-            site_config = copy.deepcopy(config)
+            site_config = copy.deepcopy(account_config)
             for site in sorted(f"amazon.{suffix}" for suffix in REGION_SITES):
                 if site == default_site:
                     continue
                 site_config.set_domain(site)
-                if site_config.cookie_jar_path == config.cookie_jar_path:
+                if site_config.cookie_jar_path == account_config.cookie_jar_path:
                     break
                 if os.path.exists(site_config.cookie_jar_path):
                     sites.append(site)
@@ -265,14 +312,16 @@ class SavedSession:
             return sites
 
     def base_url(self,
-                 site: Optional[str] = None) -> str:
+                 site: Optional[str] = None,
+                 account: Optional[str] = None) -> str:
         """
         Get the Amazon site a session is for.
 
         :param site: The Amazon site, by default the config's ``domain``.
+        :param account: The Amazon account, by default the config's ``account``.
         :return: The Amazon site's base URL.
         """
-        site_session = self._site_session(site)
+        site_session = self._site_session(site, account)
         with site_session.lock:
             return site_session.config.constants.BASE_URL
 
@@ -283,38 +332,49 @@ class SavedSession:
         return self.config
 
     def _site_session(self,
-                      site: Optional[str]) -> "_SiteSession":
-        name = self.site(site)
+                      site: Optional[str],
+                      account: Optional[str]) -> "_SiteSession":
+        site_name = self.site(site)
+        account_name = self.account(account)
+        key = (account_name, site_name)
         with self._lock:
             self._config()
-            if name not in self._site_sessions:
-                self._site_sessions[name] = _SiteSession(lambda: self._site_config(name))
+            if key not in self._site_sessions:
+                self._site_sessions[key] = _SiteSession(lambda: self._site_config(site_name, account_name))
 
-            return self._site_sessions[name]
+            return self._site_sessions[key]
 
     def _site_config(self,
-                     site: str) -> AmazonOrdersConfig:
+                     site: str,
+                     account: str) -> AmazonOrdersConfig:
         """
-        Build a site's config: the config itself for the default site, or else a copy of it for the other site. Only
-        called while the site's lock is held, so the config isn't being changed.
+        Build a site's config for an account: the config itself for the default site and account, or else a copy of it
+        for the other site or account. Only called while the site's lock is held, so the config isn't being changed.
 
-        :raises AmazonOrdersError: If ``AMAZON_DOMAIN`` sets the site, since an environment variable outranks every
-            other config source, so every call reads that site. Or if the site would share the default site's cookie
+        :raises AmazonOrdersError: If ``AMAZON_DOMAIN`` sets the site, or ``AMAZON_ACCOUNT`` the account, since an
+            environment variable outranks every other config source, so every call reads that site or account. Or if
+            the account's name isn't one an account can have. Or if the site would share the default site's cookie
             jar, as every site does with an explicit ``cookie_jar_path``, since signing in to one would then sign out
-            of the other.
+            of the other, which is also why another account can't be read then.
         """
         config = self._config()
-        if site == config.site:
+        if site == config.site and account == config.account:
             return config
 
-        if config.environment_value("domain"):
+        if site != config.site and config.environment_value("domain"):
             raise AmazonOrdersError(f"{site} can't be read, since the AMAZON_DOMAIN environment variable sets the "
                                     f"site every call reads to {config.site}. To read several sites, unset it and set "
                                     "the default site with the domain setting instead.")
+        if account != config.account and config.environment_value("account"):
+            raise AmazonOrdersError(f"The \"{account}\" account can't be read, since the AMAZON_ACCOUNT environment "
+                                    f"variable sets the account every call reads to \"{config.account}\". To read "
+                                    "several accounts, unset it and set the default account with the account setting "
+                                    "instead.")
 
         site_config = copy.deepcopy(config)
         site_config.set_domain(site)
-        if site_config.cookie_jar_path == config.cookie_jar_path:
+        site_config.set_account(account)
+        if site != config.site and site_config.cookie_jar_path == config.cookie_jar_path:
             raise AmazonOrdersError(f"{site} can't be read alongside {config.site}, since the cookie_jar_path setting "
                                     f"({config.cookie_jar_path}) keeps every site's session in one cookie jar. Leave "
                                     "it unset for each site to have its own.")

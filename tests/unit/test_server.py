@@ -163,7 +163,7 @@ class TestServer(UnitTestCase):
 
         # THEN
         for name, core_call in core_calls.items():
-            tool_parameters = set(tools[name].input_schema["properties"]) - {"site"}
+            tool_parameters = set(tools[name].input_schema["properties"]) - {"site", "account"}
             core_parameters = set(inspect.signature(core_call).parameters)
             self.assertLessEqual(tool_parameters, core_parameters,
                                  f"{name} takes parameters {core_call.__qualname__} doesn't")
@@ -176,7 +176,8 @@ class TestServer(UnitTestCase):
         self.assertFalse(result.is_error)
         signed_out = {"signed_in": False, "site": "https://www.amazon.com", "default": True,
                       "sign_in": SIGN_IN_ADVICE, "error": None}
-        self.assertEqual({**signed_out, "sites": [signed_out]}, result.structured_content)
+        self.assertEqual({**signed_out, "sites": [signed_out], "account": "default", "accounts": ["default"]},
+                         result.structured_content)
 
     async def test_check_session_with_saved_session(self):
         # GIVEN
@@ -190,7 +191,8 @@ class TestServer(UnitTestCase):
         self.assertFalse(result.is_error)
         signed_in = {"signed_in": True, "site": "https://www.amazon.com", "default": True, "sign_in": None,
                      "error": None}
-        self.assertEqual({**signed_in, "sites": [signed_in]}, result.structured_content)
+        self.assertEqual({**signed_in, "sites": [signed_in], "account": "default", "accounts": ["default"]},
+                         result.structured_content)
 
     async def test_check_session_with_expired_saved_session(self):
         # GIVEN
@@ -206,7 +208,8 @@ class TestServer(UnitTestCase):
         self.assertFalse(result.is_error)
         signed_out = {"signed_in": False, "site": "https://www.amazon.com", "default": True,
                       "sign_in": SIGN_IN_ADVICE, "error": None}
-        self.assertEqual({**signed_out, "sites": [signed_out]}, result.structured_content)
+        self.assertEqual({**signed_out, "sites": [signed_out], "account": "default", "accounts": ["default"]},
+                         result.structured_content)
 
     async def test_check_session_unknown_when_amazon_unreachable(self):
         # GIVEN
@@ -243,7 +246,8 @@ class TestServer(UnitTestCase):
                       "sign_in": "Offer to sign the user in with `sign_in` and `site` set to `amazon.de`, or they "
                                  "can run `uvx amazon-orders --domain amazon.de login --browser` in a terminal.",
                       "error": None}
-        self.assertEqual({**signed_in, "sites": [signed_in, signed_out]}, result.structured_content)
+        self.assertEqual({**signed_in, "sites": [signed_in, signed_out], "account": "default",
+                          "accounts": ["default"]}, result.structured_content)
 
     async def test_check_session_on_site(self):
         # GIVEN
@@ -257,7 +261,8 @@ class TestServer(UnitTestCase):
         self.assertFalse(result.is_error)
         signed_in = {"signed_in": True, "site": "https://www.amazon.de", "default": False, "sign_in": None,
                      "error": None}
-        self.assertEqual({**signed_in, "sites": [signed_in]}, result.structured_content)
+        self.assertEqual({**signed_in, "sites": [signed_in], "account": "default", "accounts": ["default"]},
+                         result.structured_content)
 
     async def test_check_session_on_unknown_site(self):
         # WHEN
@@ -308,7 +313,8 @@ class TestServer(UnitTestCase):
         self.assertFalse(result.is_error)
         signed_in = {"signed_in": True, "site": "https://www.amazon.de", "default": False, "sign_in": None,
                      "error": None}
-        self.assertEqual({**signed_in, "sites": [signed_in]}, result.structured_content)
+        self.assertEqual({**signed_in, "sites": [signed_in], "account": "default", "accounts": ["default"]},
+                         result.structured_content)
         amazon_session = mock_browser_login.call_args.args[0]
         self.assertEqual("https://www.amazon.de", amazon_session.config.constants.BASE_URL)
         self.assertEqual(os.path.join(self.config_dir, "cookies.amazon.de.json"),
@@ -333,7 +339,8 @@ class TestServer(UnitTestCase):
         self.assertFalse(result.is_error)
         signed_in = {"signed_in": True, "site": "https://www.amazon.com", "default": True, "sign_in": None,
                      "error": None}
-        self.assertEqual({**signed_in, "sites": [signed_in]}, result.structured_content)
+        self.assertEqual({**signed_in, "sites": [signed_in], "account": "default", "accounts": ["default"]},
+                         result.structured_content)
         mock_browser_login.return_value.login.assert_called_once_with(SIGN_IN_TIMEOUT)
 
     @patch("amazonorders_mcp.server.has_display", return_value=False)
