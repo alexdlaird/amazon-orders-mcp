@@ -11,7 +11,7 @@ license = "MIT"
 keywords = ["amazon", "order-history", "transactions", "receipts", "mcp", "mcp-server", "model-context-protocol"]
 authors = [{ name = "Alex Laird", email = "contact@alexlaird.com" }]
 maintainers = [{ name = "Alex Laird", email = "contact@alexlaird.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "amazon-auth>=1.0.0,<2",
     "amazon-orders[browser]>=6.0.0,<7",
@@ -25,10 +25,11 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Office/Business :: Financial",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
