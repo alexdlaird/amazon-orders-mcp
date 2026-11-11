@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.1.2...HEAD)
+## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.4.0...HEAD)
 
 ### Changed
 
@@ -13,6 +13,43 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Removed
 
 - **Breaking:** The deprecated `get_family_members`, use `get_orders`, whose `household_members` lists the same members.
+
+## [2.4.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.3.0...2.4.0) - 2026-11-11
+
+### Added
+
+- An optional `account` on every tool that reads Amazon, and the `account` setting, to read more than one Amazon account.
+
+## [2.3.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.2.1...2.3.0) - 2026-11-10
+
+### Added
+
+- `find_charge`, the Amazon Transactions behind a card or bank charge, each with its Order and Items.
+- The `review_spending`, `find_returns`, `track_deliveries` and `explain_charge` prompts.
+
+### Changed
+
+- Paged tools return a batch of 10 results by default, instead of 25.
+- Documentation improvements.
+
+## [2.2.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.2.0...2.2.1) - 2026-11-10
+
+### Added
+
+- `SavedSession.run_with_session()`, to run a call with a site's session, signed in or not.
+
+## [2.2.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.1.3...2.2.0) - 2026-11-10
+
+### Added
+
+- OAuth sign-in over Streamable HTTP with `--public-url` (or `AMAZON_ORDERS_MCP_PUBLIC_URL`): clients register themselves, and each is approved with the server's bearer token, which still works on its own.
+- The server's icon, for clients that show one.
+
+### Changed
+
+- `sign_in` called through a proxy or tunnel says where to sign in, instead of opening a browser window where the server runs.
+
+## [2.1.3](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.1.2...2.1.3) - 2026-11-09
 
 ### Fixed
 

@@ -13,7 +13,7 @@ authors = [{ name = "Alex Laird", email = "contact@alexlaird.com" }]
 maintainers = [{ name = "Alex Laird", email = "contact@alexlaird.com" }]
 requires-python = ">=3.10"
 dependencies = [
-    "amazon-auth>=0.2.2,<2",
+    "amazon-auth>=0.3.0,<2",
     "amazon-orders[browser]>=6.0,<7",
     "mcp>=2.3,<3",
 ]
@@ -43,6 +43,14 @@ dev = [
     "mypy",
     "responses",
 ]
+docs = [
+    "Sphinx",
+    "sphinx-notfound-page",
+    "sphinx_autodoc_typehints",
+    "sphinx-sitemap",
+    "sphinxext-opengraph",
+    "furo",
+]
 schema = [
     "Sphinx",
     "docstring_parser",
@@ -53,7 +61,7 @@ amazon-orders-mcp = "amazonorders_mcp.server:main"
 
 [project.urls]
 Changelog = "https://github.com/alexdlaird/amazon-orders-mcp/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/alexdlaird/amazon-orders-mcp#readme"
+Documentation = "https://amazon-orders-mcp.readthedocs.io"
 Sponsor = "https://github.com/sponsors/alexdlaird"
 "Source Code" = "https://github.com/alexdlaird/amazon-orders-mcp"
 
@@ -61,7 +69,7 @@ Sponsor = "https://github.com/sponsors/alexdlaird"
 package-dir = { amazonorders_mcp = "amazonorders_mcp" }
 
 [tool.setuptools.package-data]
-amazonorders_mcp = ["schema.json"]
+amazonorders_mcp = ["schema.json", "favicon.ico"]
 
 [tool.setuptools.dynamic]
 version = { attr = "amazonorders_mcp.__version__" }
@@ -106,7 +114,7 @@ directory = "build/coverage"
 [tool.flake8]
 max-line-length = 119
 statistics = true
-exclude = "venv/*,build/*,dist/*,.egg-info/*,.mypy_cache/*,.claude/*"
+exclude = "docs/*,venv/*,build/*,dist/*,.egg-info/*,.mypy_cache/*,.claude/*"
 
 [tool.mypy]
 disallow_untyped_defs = true

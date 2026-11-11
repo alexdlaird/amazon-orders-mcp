@@ -6,13 +6,14 @@ import hmac
 import json
 import logging
 import os
-from datetime import date
+from datetime import date, timedelta
 from functools import partial
 from typing import Annotated, Any, Callable, Dict, List, Optional, Protocol, TypeVar, Union, cast
 
 import anyio
 import uvicorn
 from amazonauth.util import has_display
+from amazonorders.conf import AmazonOrdersConfig
 from amazonorders.entity.invoice import Invoice
 from amazonorders.entity.order import Order
 from amazonorders.entity.order_search_result import OrderSearchResult
@@ -28,16 +29,23 @@ from amazonorders.session import AmazonSession
 from amazonorders.transactions import AmazonTransactions
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import Tool, ToolAnnotations
+from mcp.types import Icon, Tool, ToolAnnotations
 from pydantic import BaseModel, Field
 from starlette.datastructures import Headers
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.responses import FileResponse, PlainTextResponse, Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from starlette.websockets import WebSocketClose
 
 from amazonorders_mcp import __version__
+from amazonorders_mcp.oauth import (
+    CONSENT_PATH,
+    OAUTH_STATE_FILENAME,
+    AuthorizationServerMetadataMiddleware,
+    OwnerOAuthProvider,
+)
 from amazonorders_mcp.schema import (
+    ChargeMatches,
     GiftCardsPage,
     InvoiceList,
     OrderDetails,
@@ -72,8 +80,12 @@ INSTRUCTIONS = (
     "Each Amazon site, like amazon.com or amazon.de, has its own orders and its own sign-in. Tools read the user's "
     "default site unless given another as `site`, so pass the site an order was placed on, and `check_session` "
     "says which sites the user is signed in to. "
+    "The user may also have signed in to someone else's own Amazon account, like a partner's. Tools read the user's "
+    "default account unless given another as `account`, so pass one only when the user asks about that person, and "
+    "`check_session` lists the accounts. "
     "For what the user spent, use `get_transactions`, the charges and refunds as they posted, rather than adding up "
-    "order totals. Each site's amounts are in its own currency, so total each site separately. "
+    "order totals. Each site's amounts are in its own currency, so total each site separately. To find what a card "
+    "or bank charge was, use `find_charge` with its amount and date. "
     "For what's arriving, get recent orders (`time_filter` `last30`) and read each shipment's `delivery_status`; "
     "`get_tracking` gives a shipment's carrier and tracking number. "
     "Answer with what the user asked for, summarized, and repeat addresses or payment details only when they ask. "
@@ -81,6 +93,40 @@ INSTRUCTIONS = (
     "sign them in with `sign_in`, and call it only once they agree. If that can't work, they can run "
     f"`{SIGN_IN_COMMAND}` in a terminal instead."
 )
+
+#: The ``review_spending`` prompt.
+SPENDING_PROMPT = (
+    "Review what I've spent on Amazon over a period I give you, and ask me for one if I haven't. Use "
+    "`get_transactions` for what was charged and refunded, and the Orders behind those charges for what was bought, "
+    "then group my spending by what it was for (e.g. groceries, household, electronics). Total each Amazon site "
+    "separately, since each is in its own currency. Point out anything that stands out, like a large charge, a "
+    "repeat purchase, or a recurring one, and only read as far back as the period needs."
+)
+
+#: The ``find_returns`` prompt.
+RETURNS_PROMPT = (
+    "Find the Items in my recent Amazon orders that I can still return. Use `get_orders` with `full_details` for my "
+    "recent orders, and list the Items whose `return_eligible_date` hasn't passed, the soonest to close first, each "
+    "with its Order number and the date its return window closes."
+)
+
+#: The ``track_deliveries`` prompt.
+DELIVERIES_PROMPT = (
+    "Tell me what I have arriving from Amazon. Use `get_orders` with `time_filter` `last30` for my recent orders, "
+    "and list each shipment that hasn't been delivered yet, the soonest to arrive first, with its `delivery_status` "
+    "and what's in it. For any I ask about, `get_tracking` gives its carrier and tracking number."
+)
+
+#: The ``explain_charge`` prompt.
+CHARGE_PROMPT = (
+    "Help me work out what an Amazon charge on my card or bank statement was. Ask me for its amount and date, and "
+    "the card's last four digits if I know them, then use `find_charge` and tell me what was bought and in which "
+    "Order. If more than one Transaction matches, show me each so I can tell which it is."
+)
+
+#: How many days either side of a charge's date ``find_charge`` matches Transactions by default, since Amazon
+#: completes a charge on a different day than a statement can show it.
+CHARGE_WINDOW_DAYS = 3
 
 #: What ``get_invoices`` adds to links it returns, since not every client applies ``INSTRUCTIONS``, but each reads the
 #: tool's result.
@@ -106,8 +152,9 @@ AUTOMATED_SIGN_IN_DOCS_URL = "https://amazon-orders.readthedocs.io/#automating-a
 #: How many seconds pass between the reports that keep a client waiting on ``sign_in``.
 SIGN_IN_REPORT_INTERVAL = 5
 
-#: How many results a paged tool collects when the client doesn't say, so a bare call stays bounded.
-DEFAULT_LIMIT = 25
+#: How many results a paged tool collects when the client doesn't say, so a bare call stays bounded: one page of
+#: Order history.
+DEFAULT_LIMIT = 10
 
 #: The transports the server runs over: ``stdio`` for a client that runs the server, and ``streamable-http`` for
 #: clients that connect to it.
@@ -126,12 +173,28 @@ DEFAULT_PORT = 8000
 #: The path that answers a health check over HTTP, without a token and without calling Amazon.
 HEALTH_PATH = "/health"
 
+#: The path of the server's icon over HTTP, for clients that show a site's icon, served without a token.
+FAVICON_PATH = "/favicon.ico"
+
+#: The paths served over HTTP without a token.
+PUBLIC_PATHS = (HEALTH_PATH, FAVICON_PATH)
+
 #: The environment variable that can hold the bearer token HTTP clients must send, instead of ``--token-file``.
 AUTHORIZATION_ENVIRONMENT_VARIABLE = "AMAZON_ORDERS_MCP_TOKEN"
+
+#: The environment variable that can hold the server's public URL, instead of ``--public-url``.
+PUBLIC_URL_ENVIRONMENT_VARIABLE = "AMAZON_ORDERS_MCP_PUBLIC_URL"
+
+#: The server's icon, for clients that show one.
+ICON_URL = "https://raw.githubusercontent.com/alexdlaird/amazon-orders-mcp/main/mcpb/icon.png"
 
 #: The ``site`` parameter every tool that reads Amazon takes.
 SITE = Field(description="The Amazon site to read, e.g. `amazon.de`, since each site has its own orders. By default, "
                          "the user's default site (see `check_session`).")
+
+#: The ``account`` parameter every tool that reads Amazon takes.
+ACCOUNT = Field(description="Another Amazon account to read, e.g. `spouse`, only when the user asks about that "
+                            "person (see `check_session`).")
 
 T = TypeVar("T")
 
@@ -161,6 +224,8 @@ class SessionStatus(SiteSessionStatus):
 
     sites: List[SiteSessionStatus] = Field(description="Every site checked: the one asked about, or else the default "
                                                        "site and every other site with a saved session.")
+    account: str = Field(description="The Amazon account checked, as `account` accepts it.")
+    accounts: List[str] = Field(description="Every Amazon account with a saved session, the default one first.")
 
 
 class ConfigValues(BaseModel):
@@ -186,34 +251,97 @@ class ConfigValue(BaseModel):
 
 def create_server(saved_session: Optional[SavedSession] = None,
                   *,
-                  additional_instructions: str = "") -> MCPServer:
+                  additional_instructions: str = "",
+                  oauth_provider: Optional[OwnerOAuthProvider] = None) -> MCPServer:
     """
     Create the MCP server, with a tool for each ``amazon-orders`` read, and one to sign in.
 
     :param saved_session: The session the tools use, by default the one the ``amazon-orders`` CLI saved.
     :param additional_instructions: Instructions appended to the defaults when composing the server with other tools.
+    :param oauth_provider: The authorization server that signs clients in over HTTP, if they sign in with OAuth.
     :return: The server.
     """
     session = saved_session or SavedSession()
     additional_instructions = additional_instructions.strip()
     instructions = INSTRUCTIONS + (f" {additional_instructions}" if additional_instructions else "")
     server = AmazonOrdersServer(name="amazon-orders", instructions=instructions, version=__version__,
-                                log_level="WARNING")
+                                icons=[Icon(src=ICON_URL, mime_type="image/png", sizes=["512x512"])],
+                                log_level="WARNING", auth_server_provider=oauth_provider,
+                                auth=oauth_provider.auth_settings() if oauth_provider else None)
+    if oauth_provider:
+        server.custom_route(CONSENT_PATH, methods=["GET", "POST"], include_in_schema=False)(oauth_provider.consent)
 
     async def run(call: Callable[[AmazonSession], T],
-                  site: Optional[str]) -> T:
+                  site: Optional[str],
+                  account: Optional[str]) -> T:
         try:
-            return await anyio.to_thread.run_sync(session.run, call, site)
+            return await anyio.to_thread.run_sync(session.run, call, site, account)
         except AmazonOrdersAuthError as e:
             logger.debug(f"Tool call failed, the user isn't signed in: {e}")
 
-            advice = await anyio.to_thread.run_sync(_sign_in_advice, session, site)
+            advice = await anyio.to_thread.run_sync(_sign_in_advice, session, site, account)
             raise ToolError(f"{e} The user isn't signed in to Amazon, or their session expired. {advice}, then try "
                             "again.") from e
         except AmazonOrdersError as e:
             logger.debug(f"Tool call failed: {e}")
 
             raise ToolError(_describe_error(e)) from e
+
+    @server.tool(annotations=READ_ONLY,
+                 description="Find the Amazon Transactions behind a card or bank charge, by its amount and date, each "
+                             "with its Order and the Items in it. A Transaction matches when its amount equals "
+                             "`amount` and it completed within `window_days` of `charge_date`, since Amazon can "
+                             "complete a charge on a different day than a statement shows it.")
+    async def find_charge(
+            ctx: Context,
+            amount: Annotated[float, Field(
+                description="The charge or refund's amount, e.g. `12.99`. Its sign is ignored, since statements and "
+                            "Amazon show charges and refunds with different signs.")],
+            charge_date: Annotated[date, Field(description="The date the charge shows, e.g. `2026-11-10`.")],
+            last_four: Annotated[Optional[str], Field(
+                description="The last four digits of the card it was charged to, to match only that card's "
+                            "Transactions.")] = None,
+            window_days: Annotated[int, Field(
+                description="How many days either side of `charge_date` a Transaction can have completed.")
+            ] = CHARGE_WINDOW_DAYS,
+            site: Annotated[Optional[str], SITE] = None,
+            account: Annotated[Optional[str], ACCOUNT] = None
+    ) -> ChargeMatches:
+        progress = _progress_reporter(ctx, "Transactions")
+
+        def find(amazon_session: AmazonSession) -> List[Dict[str, Any]]:
+            earliest = charge_date - timedelta(days=window_days)
+            transactions = AmazonTransactions(amazon_session).get_transactions(
+                days=max((date.today() - earliest).days + 1, 1), progress=progress)
+
+            orders: Dict[str, Order] = {}
+            matches = []
+            for transaction in transactions:
+                if not _matches_charge(transaction, amount, charge_date, window_days, last_four):
+                    continue
+                match = transaction.to_dict(exclude_none=True)
+                if transaction.order_number:
+                    if transaction.order_number not in orders:
+                        orders[transaction.order_number] = AmazonOrders(amazon_session).get_order(
+                            transaction.order_number)
+                    match["order"] = orders[transaction.order_number].to_dict(exclude_none=True)
+                matches.append(match)
+
+            return matches
+
+        matches = await run(find, site, account)
+
+        result: Dict[str, Any] = {"items": matches}
+        if not matches:
+            card = f" on the card ending in {last_four}" if last_four else ""
+            result["note"] = (f"No Transaction of {abs(amount):.2f} completed within {window_days} days of "
+                              f"{charge_date.isoformat()}{card}. A larger `window_days`, or another `site`, may "
+                              "find it.")
+            other_accounts = await anyio.to_thread.run_sync(_other_accounts, session, account)
+            if other_accounts:
+                result["note"] += (f" So may another of the user's accounts, if the card is shared: "
+                                   f"{', '.join(f'`{name}`' for name in other_accounts)}, as `account`.")
+        return ChargeMatches.model_validate(result)
 
     @server.tool(annotations=SIGN_IN,
                  description="Sign the user in to Amazon, when they ask you to or after a tool says they aren't "
@@ -229,30 +357,43 @@ def create_server(saved_session: Optional[SavedSession] = None,
                             "they're only asked once.")] = None,
             site: Annotated[Optional[str], Field(
                 description="The Amazon site to sign in to, e.g. `amazon.de`, since each site has its own sign-in. "
-                            "By default, the user's default site.")] = None
+                            "By default, the user's default site.")] = None,
+            account: Annotated[Optional[str], Field(
+                description="The Amazon account to sign in to, by a name for it, e.g. `spouse`, to add someone "
+                            "else's own account, like a partner's. By default, the user's default account.")] = None
     ) -> SessionStatus:
         failure: Optional[AmazonOrdersError] = None
         try:
             site = await anyio.to_thread.run_sync(session.site, site)
+            account = await anyio.to_thread.run_sync(session.account, account)
         except AmazonOrdersError as e:
             raise ToolError(_describe_error(e)) from e
+
+        if _is_remote_request(ctx):
+            logger.debug("Tool call failed, the user is connected remotely, so a browser window wouldn't reach them")
+
+            command = await anyio.to_thread.run_sync(
+                _terminal_command, session, SIGN_IN_COMMAND if has_display() else HEADLESS_SIGN_IN_COMMAND, site,
+                account)
+            raise ToolError("The user is connected to the server remotely, so a browser window where it runs "
+                            f"wouldn't reach them. When they're at that machine, they can sign in there with "
+                            f"`{command}`, using the server's config directory: {AUTOMATED_SIGN_IN_DOCS_URL}. The "
+                            "server uses the new session on its next call.")
 
         if not has_display():
             logger.debug("Tool call failed, there's no display to open a browser window on")
 
-            command = HEADLESS_SIGN_IN_COMMAND
-            if site != await anyio.to_thread.run_sync(session.site):
-                command = f"uvx amazon-orders --domain {site} login"
+            command = await anyio.to_thread.run_sync(_terminal_command, session, HEADLESS_SIGN_IN_COMMAND, site,
+                                                     account)
             raise ToolError("There's no display where the server runs, so it can't open a browser window for the "
-                            f"user to sign in. Instead, they can sign in there with `{command}`, using the server's "
-                            "config directory (for a server in a container, from a one-off container on the same "
-                            "volume), and enter their credentials, or set them in that command's environment: "
-                            f"{AUTOMATED_SIGN_IN_DOCS_URL}. The server uses the new session on its next call.")
+                            f"user to sign in. They can sign in there with `{command}`, using the server's config "
+                            f"directory: {AUTOMATED_SIGN_IN_DOCS_URL}. The server uses the new session on its next "
+                            "call.")
 
         async with anyio.create_task_group() as task_group:
-            task_group.start_soon(_report_signing_in, ctx, session, site)
+            task_group.start_soon(_report_signing_in, ctx, session, site, account)
             try:
-                await anyio.to_thread.run_sync(partial(session.sign_in, browser=browser, site=site))
+                await anyio.to_thread.run_sync(partial(session.sign_in, browser=browser, site=site, account=account))
             except AmazonOrdersError as e:
                 failure = e
             task_group.cancel_scope.cancel()
@@ -268,9 +409,10 @@ def create_server(saved_session: Optional[SavedSession] = None,
 
             raise ToolError(_describe_error(failure)) from failure
 
-        signed_in = await anyio.to_thread.run_sync(_site_session_status, session, site, True)
+        signed_in = await anyio.to_thread.run_sync(_site_session_status, session, site, account, True)
+        accounts = await anyio.to_thread.run_sync(session.accounts)
 
-        return SessionStatus(**signed_in.model_dump(), sites=[signed_in])
+        return SessionStatus(**signed_in.model_dump(), sites=[signed_in], account=account, accounts=accounts)
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_orders"))
@@ -284,7 +426,8 @@ def create_server(saved_session: Optional[SavedSession] = None,
             full_details: Annotated[bool, parameter_field("get_orders", "full_details")] = False,
             limit: Annotated[Optional[int], parameter_field("get_orders", "limit")] = DEFAULT_LIMIT,
             cursor: Annotated[Optional[Dict[str, Any]], parameter_field("get_orders", "cursor")] = None,
-            site: Annotated[Optional[str], SITE] = None
+            site: Annotated[Optional[str], SITE] = None,
+            account: Annotated[Optional[str], ACCOUNT] = None
     ) -> OrdersPage:
         progress = _progress_reporter(ctx, "Orders")
 
@@ -299,7 +442,7 @@ def create_server(saved_session: Optional[SavedSession] = None,
                                                                 cursor=cursor,
                                                                 progress_with_total=progress)
 
-        page = await run(get, site)
+        page = await run(get, site, account)
 
         result = page.to_dict(exclude_none=True)
         if not result.get("items") and cursor is None:
@@ -315,7 +458,8 @@ def create_server(saved_session: Optional[SavedSession] = None,
             query: Annotated[str, parameter_field("search_orders", "query")],
             limit: Annotated[Optional[int], parameter_field("search_orders", "limit")] = DEFAULT_LIMIT,
             cursor: Annotated[Optional[Dict[str, Any]], parameter_field("search_orders", "cursor")] = None,
-            site: Annotated[Optional[str], SITE] = None
+            site: Annotated[Optional[str], SITE] = None,
+            account: Annotated[Optional[str], ACCOUNT] = None
     ) -> OrderSearchPage:
         progress = _progress_reporter(ctx, "matching Items")
 
@@ -325,7 +469,7 @@ def create_server(saved_session: Optional[SavedSession] = None,
                                                                    cursor=cursor,
                                                                    progress=progress)
 
-        page = await run(get, site)
+        page = await run(get, site, account)
 
         return OrderSearchPage.model_validate(page.to_dict(exclude_none=True))
 
@@ -333,12 +477,13 @@ def create_server(saved_session: Optional[SavedSession] = None,
                  description=tool_description("get_order"))
     async def get_order(
             order_id: Annotated[str, parameter_field("get_order", "order_id")],
-            site: Annotated[Optional[str], SITE] = None
+            site: Annotated[Optional[str], SITE] = None,
+            account: Annotated[Optional[str], ACCOUNT] = None
     ) -> OrderDetails:
         def get(amazon_session: AmazonSession) -> Order:
             return AmazonOrders(amazon_session).get_order(order_id)
 
-        order = await run(get, site)
+        order = await run(get, site, account)
 
         return OrderDetails.model_validate(order.to_dict(exclude_none=True))
 
@@ -347,12 +492,13 @@ def create_server(saved_session: Optional[SavedSession] = None,
     async def get_tracking(
             order_id: Annotated[str, parameter_field("get_tracking", "order_id")],
             shipment_id: Annotated[str, parameter_field("get_tracking", "shipment_id")],
-            site: Annotated[Optional[str], SITE] = None
+            site: Annotated[Optional[str], SITE] = None,
+            account: Annotated[Optional[str], ACCOUNT] = None
     ) -> TrackingDetails:
         def get(amazon_session: AmazonSession) -> Tracking:
             return AmazonOrders(amazon_session).get_tracking(order_id, shipment_id)
 
-        tracking = await run(get, site)
+        tracking = await run(get, site, account)
 
         return TrackingDetails.model_validate(tracking.to_dict(exclude_none=True))
 
@@ -360,12 +506,13 @@ def create_server(saved_session: Optional[SavedSession] = None,
                  description=tool_description("get_invoices"))
     async def get_invoices(
             order_id: Annotated[str, parameter_field("get_invoices", "order_id")],
-            site: Annotated[Optional[str], SITE] = None
+            site: Annotated[Optional[str], SITE] = None,
+            account: Annotated[Optional[str], ACCOUNT] = None
     ) -> InvoiceList:
         def get(amazon_session: AmazonSession) -> List[Invoice]:
             return AmazonOrders(amazon_session).get_invoices(order_id)
 
-        invoices = await run(get, site)
+        invoices = await run(get, site, account)
 
         result: Dict[str, Any] = {"items": [invoice.to_dict(exclude_none=True) for invoice in invoices]}
         if invoices:
@@ -380,7 +527,8 @@ def create_server(saved_session: Optional[SavedSession] = None,
             order_id: Annotated[Optional[str], parameter_field("get_transactions", "order_id")] = None,
             limit: Annotated[Optional[int], parameter_field("get_transactions", "limit")] = DEFAULT_LIMIT,
             cursor: Annotated[Optional[Dict[str, Any]], parameter_field("get_transactions", "cursor")] = None,
-            site: Annotated[Optional[str], SITE] = None
+            site: Annotated[Optional[str], SITE] = None,
+            account: Annotated[Optional[str], ACCOUNT] = None
     ) -> TransactionsPage:
         progress = _progress_reporter(ctx, "Transactions")
 
@@ -391,7 +539,7 @@ def create_server(saved_session: Optional[SavedSession] = None,
                                                                             cursor=cursor,
                                                                             progress=progress)
 
-        page = await run(get, site)
+        page = await run(get, site, account)
 
         return TransactionsPage.model_validate(page.to_dict(exclude_none=True))
 
@@ -402,7 +550,8 @@ def create_server(saved_session: Optional[SavedSession] = None,
             days: Annotated[int, parameter_field("get_gift_cards", "days")] = 365,
             limit: Annotated[Optional[int], parameter_field("get_gift_cards", "limit")] = DEFAULT_LIMIT,
             cursor: Annotated[Optional[Dict[str, Any]], parameter_field("get_gift_cards", "cursor")] = None,
-            site: Annotated[Optional[str], SITE] = None
+            site: Annotated[Optional[str], SITE] = None,
+            account: Annotated[Optional[str], ACCOUNT] = None
     ) -> GiftCardsPage:
         progress = _progress_reporter(ctx, "Gift Card activity entries")
 
@@ -412,32 +561,35 @@ def create_server(saved_session: Optional[SavedSession] = None,
                                                                        cursor=cursor,
                                                                        progress=progress)
 
-        page = await run(get, site)
+        page = await run(get, site, account)
 
         return GiftCardsPage.model_validate(page.to_dict(exclude_none=True))
 
     @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_prime_payments"))
     async def get_prime_payments(
-            site: Annotated[Optional[str], SITE] = None
+            site: Annotated[Optional[str], SITE] = None,
+            account: Annotated[Optional[str], ACCOUNT] = None
     ) -> PrimePaymentList:
         def get(amazon_session: AmazonSession) -> List[PrimePayment]:
             return AmazonPrime(amazon_session).get_prime_payments()
 
-        payments = await run(get, site)
+        payments = await run(get, site, account)
 
         return PrimePaymentList.model_validate({"items": [payment.to_dict(exclude_none=True) for payment in payments]})
 
     @server.tool(annotations=READ_ONLY,
                  description="Check with Amazon whether the user's saved sessions still work: on `site`, or else on "
                              "their default site and every other Amazon site they have a saved session for. Also "
-                             "says which site is the default.")
+                             "says which site is the default, and lists the user's accounts.")
     async def check_session(
             site: Annotated[Optional[str], Field(
                 description="The Amazon site to check, e.g. `amazon.de`. By default, the default site and every "
-                            "other site with a saved session are checked.")] = None
+                            "other site with a saved session are checked.")] = None,
+            account: Annotated[Optional[str], Field(
+                description="The Amazon account to check, e.g. `spouse`. By default, the default account.")] = None
     ) -> SessionStatus:
-        return await anyio.to_thread.run_sync(_session_status, session, site)
+        return await anyio.to_thread.run_sync(_session_status, session, site, account)
 
     @server.tool(annotations=READ_ONLY,
                  description="Get the settings that can be changed with `update_config`, and their values. "
@@ -455,7 +607,8 @@ def create_server(saved_session: Optional[SavedSession] = None,
                              "restarts unless `save` is true, which you can offer if a change keeps helping. "
                              "`domain` is the default site, which tools read when they aren't given `site`, so to "
                              "read another site once, pass it as `site` instead. After changing `domain`, check with "
-                             "`check_session`, since the user may need to sign in to the new default site. What each "
+                             "`check_session`, since the user may need to sign in to the new default site. "
+                             "`account` is the default account the same way, one from `check_session`. What each "
                              f"setting does: {CONFIG_DOCS_URL}")
     async def update_config(
             key: Annotated[str, Field(description="The setting, from `get_config`.")],
@@ -472,6 +625,26 @@ def create_server(saved_session: Optional[SavedSession] = None,
             raise ToolError(_describe_error(e)) from e
 
         return ConfigValue(key=key, value=new_value, saved=saved)
+
+    @server.prompt(title="Review Amazon spending",
+                   description="Review what you've spent on Amazon over a period, grouped by what it was for.")
+    def review_spending() -> str:
+        return SPENDING_PROMPT
+
+    @server.prompt(title="Find returnable orders",
+                   description="Find the Items in your recent Amazon orders you can still return.")
+    def find_returns() -> str:
+        return RETURNS_PROMPT
+
+    @server.prompt(title="What's arriving",
+                   description="See what you have arriving from Amazon, and when.")
+    def track_deliveries() -> str:
+        return DELIVERIES_PROMPT
+
+    @server.prompt(title="Explain a charge",
+                   description="Work out what an Amazon charge on your card or bank statement was.")
+    def explain_charge() -> str:
+        return CHARGE_PROMPT
 
     return server
 
@@ -490,6 +663,16 @@ class AmazonOrdersServer(MCPServer):
                 tool.output_schema = _inline_definitions(tool.output_schema)
                 _drop_field_titles(tool.output_schema)
         return tools
+
+
+def _matches_charge(transaction: Transaction,
+                    amount: float,
+                    charge_date: date,
+                    window_days: int,
+                    last_four: Optional[str]) -> bool:
+    return (round(abs(transaction.grand_total), 2) == round(abs(amount), 2)
+            and abs((transaction.completed_date - charge_date).days) <= window_days
+            and (last_four is None or transaction.payment_method_last_4 == last_four))
 
 
 def _inline_definitions(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -559,7 +742,8 @@ def _empty_orders_note(year: Optional[int],
 def create_http_app(server: MCPServer,
                     host: str = DEFAULT_HOST,
                     json_response: bool = False,
-                    token: Optional[str] = None) -> ASGIApp:
+                    token: Optional[str] = None,
+                    oauth_provider: Optional[OwnerOAuthProvider] = None) -> ASGIApp:
     """
     Create the app that serves the MCP server over Streamable HTTP, at ``/mcp``. It's stateless, since every client
     is served from the one saved session, and :data:`HEALTH_PATH` answers ``ok`` without calling Amazon.
@@ -570,20 +754,57 @@ def create_http_app(server: MCPServer,
     :param json_response: Whether to answer each request with JSON, instead of an event stream that also carries the
         call's progress.
     :param token: A bearer token every request but the health check must carry, if the server checks one.
+    :param oauth_provider: The authorization server that signs clients in, if they sign in with OAuth. It accepts
+        ``token`` too, as a bearer token.
     :return: The app.
     """
     app = server.streamable_http_app(stateless_http=True, json_response=json_response, host=host)
     app.add_route(HEALTH_PATH, _health, methods=["GET"], include_in_schema=False)
-    if token is None:
-        return app
+    app.add_route(FAVICON_PATH, _favicon, methods=["GET"], include_in_schema=False)
+    if oauth_provider is not None:
+        protected_app: ASGIApp = AuthorizationServerMetadataMiddleware(app, oauth_provider)
+    elif token is not None:
+        protected_app = BearerTokenMiddleware(app, token)
+    else:
+        protected_app = app
 
-    return BearerTokenMiddleware(app, token)
+    return ResponseHeadersMiddleware(protected_app, {"X-Muppets": "no strings attached"})
+
+
+class ResponseHeadersMiddleware:
+    """
+    Adds headers to every HTTP response.
+
+    :param app: The app.
+    :param headers: The headers to add.
+    """
+
+    def __init__(self,
+                 app: ASGIApp,
+                 headers: Dict[str, str]) -> None:
+        self.app = app
+        self._headers = [(name.lower().encode("latin-1"), value.encode("latin-1")) for name, value in headers.items()]
+
+    async def __call__(self,
+                       scope: Scope,
+                       receive: Receive,
+                       send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                message = {**message, "headers": [*message.get("headers", []), *self._headers]}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 class BearerTokenMiddleware:
     """
-    Requires ``Authorization: Bearer <token>`` on every HTTP request but the health check, and answers ``401`` to one
-    without it.
+    Requires ``Authorization: Bearer <token>`` on every HTTP request but those to :data:`PUBLIC_PATHS`, and answers
+    ``401`` to one without it.
 
     :param app: The app to protect.
     :param token: The bearer token.
@@ -602,7 +823,8 @@ class BearerTokenMiddleware:
         if scope["type"] == "websocket" and not self._authorized(Headers(scope=scope)):
             await WebSocketClose()(scope, receive, send)
             return
-        if scope["type"] == "http" and scope["path"] != HEALTH_PATH and not self._authorized(Headers(scope=scope)):
+        if (scope["type"] == "http" and scope["path"] not in PUBLIC_PATHS
+                and not self._authorized(Headers(scope=scope))):
             response = PlainTextResponse("Unauthorized", status_code=401, headers={"WWW-Authenticate": "Bearer"})
             await response(scope, receive, send)
             return
@@ -616,51 +838,76 @@ class BearerTokenMiddleware:
         return scheme.lower() == "bearer" and hmac.compare_digest(token.strip().encode("utf-8"), self._token)
 
 
+def _is_remote_request(ctx: Context) -> bool:
+    """
+    Whether a request reached the server through a proxy or tunnel, so the user likely isn't at the machine it runs on.
+    """
+    headers = ctx.headers or {}
+
+    return any(name in headers for name in ("x-forwarded-for", "forwarded"))
+
+
+async def _favicon(request: Request) -> Response:
+    return FileResponse(os.path.join(os.path.dirname(__file__), "favicon.ico"), media_type="image/x-icon",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
 async def _health(request: Request) -> Response:
     return PlainTextResponse("ok")
 
 
 def _session_status(session: SavedSession,
-                    site: Optional[str]) -> SessionStatus:
+                    site: Optional[str],
+                    account: Optional[str]) -> SessionStatus:
     try:
-        sites = [session.site(site)] if site else session.sites()
+        account = session.account(account)
+        sites = [session.site(site)] if site else session.sites(account)
     except AmazonOrdersError as e:
         raise ToolError(_describe_error(e)) from e
 
-    statuses = [_site_session_status(session, checked_site) for checked_site in sites]
+    statuses = [_site_session_status(session, checked_site, account) for checked_site in sites]
 
-    return SessionStatus(**statuses[0].model_dump(), sites=statuses)
+    return SessionStatus(**statuses[0].model_dump(), sites=statuses, account=account, accounts=session.accounts())
 
 
 def _site_session_status(session: SavedSession,
                          site: str,
+                         account: str,
                          signed_in: Optional[bool] = None) -> SiteSessionStatus:
     """
-    Get a site's session status, checking with Amazon whether it still works unless ``signed_in`` is known. A site
-    that can't be checked is reported with its error, so it doesn't hide the other sites'.
+    Get a site's session status for an account, checking with Amazon whether it still works unless ``signed_in`` is
+    known. A site that can't be checked is reported with its error, so it doesn't hide the other sites'.
     """
     default = site == session.site()
     try:
         if signed_in is None:
             try:
-                signed_in = session.run(partial(AmazonSession.check_session, verify=True), site)
+                signed_in = session.run(partial(AmazonSession.check_session, verify=True), site, account)
             except AmazonOrdersAuthError:
                 signed_in = False
-        base_url = session.base_url(site)
+        base_url = session.base_url(site, account)
     except AmazonOrdersError as e:
-        return SiteSessionStatus(signed_in=None, site=_site_base_url(session, site), default=default,
+        return SiteSessionStatus(signed_in=None, site=_site_base_url(session, site, account), default=default,
                                  error=f"Could not check the session on {site}. {_describe_error(e)}")
 
     return SiteSessionStatus(signed_in=signed_in, site=base_url, default=default,
-                             sign_in=None if signed_in else f"{_sign_in_advice(session, site)}.")
+                             sign_in=None if signed_in else f"{_sign_in_advice(session, site, account)}.")
 
 
 def _site_base_url(session: SavedSession,
-                   site: str) -> str:
+                   site: str,
+                   account: str) -> str:
     try:
-        return session.base_url(site)
+        return session.base_url(site, account)
     except AmazonOrdersError:
         return site
+
+
+def _other_accounts(session: SavedSession,
+                    account: Optional[str]) -> List[str]:
+    account = session.account(account)
+
+    return [name for name in session.accounts() if name != account]
 
 
 def _describe_browser_choices(error: AmazonOrdersBrowserNotInstalledError) -> str:
@@ -673,28 +920,51 @@ def _describe_browser_choices(error: AmazonOrdersBrowserNotInstalledError) -> st
 
 
 def _sign_in_advice(session: SavedSession,
-                    site: Optional[str]) -> str:
+                    site: Optional[str],
+                    account: Optional[str]) -> str:
     """
-    Say how the user can sign in to a site: with the ``sign_in`` tool, or in a terminal.
+    Say how the user can sign in to a site and account: with the ``sign_in`` tool, or in a terminal.
     """
     site = session.site(site)
-    if site == session.site():
-        return f"Offer to sign the user in with `sign_in`, or they can run `{SIGN_IN_COMMAND}` in a terminal"
+    account = session.account(account)
+    arguments = []
+    if site != session.site():
+        arguments.append(f"`site` set to `{site}`")
+    if account != session.account():
+        arguments.append(f"`account` set to `{account}`")
+    with_arguments = f" and {' and '.join(arguments)}" if arguments else ""
 
-    return (f"Offer to sign the user in with `sign_in` and `site` set to `{site}`, or they can run "
-            f"`uvx amazon-orders --domain {site} login --browser` in a terminal")
+    return (f"Offer to sign the user in with `sign_in`{with_arguments}, or they can run "
+            f"`{_terminal_command(session, SIGN_IN_COMMAND, site, account)}` in a terminal")
+
+
+def _terminal_command(session: SavedSession,
+                      command: str,
+                      site: str,
+                      account: str) -> str:
+    """
+    Make an ``amazon-orders`` command for a site and account other than the defaults.
+    """
+    options = ""
+    if site != session.site():
+        options += f"--domain {site} "
+    if account != session.account():
+        options += f"--account {account} "
+
+    return command.replace("amazon-orders ", f"amazon-orders {options}", 1)
 
 
 async def _report_signing_in(ctx: Context,
                              session: SavedSession,
-                             site: str) -> None:
+                             site: str,
+                             account: str) -> None:
     """
     Report to the client every few seconds what the sign-in is doing, which is how a client that resets its timeout
     on progress knows the call is alive. Runs until it's cancelled.
     """
     waited = 0
     while True:
-        await ctx.report_progress(waited, None, session.sign_in_status(site))
+        await ctx.report_progress(waited, None, session.sign_in_status(site, account))
         await anyio.sleep(SIGN_IN_REPORT_INTERVAL)
         waited += SIGN_IN_REPORT_INTERVAL
 
@@ -752,8 +1022,18 @@ def _parse_args(args: Optional[List[str]]) -> argparse.Namespace:
                         help="A file holding a bearer token that every HTTP request must carry, or set "
                              f"{AUTHORIZATION_ENVIRONMENT_VARIABLE} instead. Required unless --host is a loopback "
                              "address; there, no token is checked by default.")
+    parser.add_argument("--public-url",
+                        default=os.environ.get(PUBLIC_URL_ENVIRONMENT_VARIABLE, "").strip() or None,
+                        help="The server's public HTTPS URL (e.g. a tunnel's, https://<name>.ngrok-free.dev), to sign "
+                             "clients in with OAuth, each approved on a page that asks for the bearer token. Or set "
+                             f"{PUBLIC_URL_ENVIRONMENT_VARIABLE} instead.")
     parsed_args = parser.parse_args(args)
     parsed_args.token = _read_token(parser, parsed_args.token_file)
+    if parsed_args.public_url and parsed_args.transport != "streamable-http":
+        parser.error("--public-url only applies to --transport streamable-http.")
+    if parsed_args.public_url and not parsed_args.token:
+        parser.error(f"--public-url needs --token-file or {AUTHORIZATION_ENVIRONMENT_VARIABLE} too, since clients "
+                     "are approved with it.")
 
     if parsed_args.transport == "streamable-http" and parsed_args.host not in LOOPBACK_HOSTS and not parsed_args.token:
         parser.error(f"--host {parsed_args.host} can be reached from other machines, so set --token-file or "
@@ -788,11 +1068,18 @@ def main(args: Optional[List[str]] = None) -> None:
     :param args: The command line arguments, by default the ones the server was started with.
     """
     parsed_args = _parse_args(args)
-    server = create_server()
+    saved_session = None
+    oauth_provider = None
+    if parsed_args.public_url:
+        config = AmazonOrdersConfig()
+        saved_session = SavedSession(config)
+        oauth_provider = OwnerOAuthProvider(parsed_args.public_url, parsed_args.token,
+                                            os.path.join(os.path.dirname(config.config_path), OAUTH_STATE_FILENAME))
+    server = create_server(saved_session, oauth_provider=oauth_provider)
     if parsed_args.transport == "stdio":
         server.run()
         return
 
     app = create_http_app(server, host=parsed_args.host, json_response=parsed_args.json_response,
-                          token=parsed_args.token)
+                          token=parsed_args.token, oauth_provider=oauth_provider)
     uvicorn.run(app, host=parsed_args.host, port=parsed_args.port, log_level=server.settings.log_level.lower())

@@ -85,3 +85,36 @@ class GiftCardsPage(ToolOutput):
 
 class PrimePaymentList(ToolOutput):
     tool = "get_prime_payments"
+
+
+class ChargeMatches(BaseModel):
+    """
+    The ``find_charge`` tool's result, published with an output schema built from the generated one for
+    ``get_transactions``, so it follows it when ``amazon-orders`` changes. Each match's Order is the one ``get_order``
+    returns, so it's described by reference rather than repeating that tool's schema.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls,
+                                     core_schema: CoreSchema,
+                                     handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        transactions = SCHEMA["tools"]["get_transactions"]["output_schema"]["properties"]["items"]
+        transaction = copy.deepcopy(transactions["items"])
+        transaction["properties"]["order"] = {
+            "type": "object",
+            "description": "The Transaction's Order, as `get_order` returns it, with its Items. Absent when the "
+                           "Transaction has no Order number.",
+            "additionalProperties": True,
+        }
+
+        return {
+            "type": "object",
+            "description": "The Transactions that match the charge, each with its Order.",
+            "properties": {
+                "items": {"type": "array", "description": "The matching Transactions.", "items": transaction},
+                "note": {"type": "string", "description": "Why nothing matched, when nothing did."},
+            },
+            "additionalProperties": True,
+        }

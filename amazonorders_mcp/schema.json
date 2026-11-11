@@ -4,8 +4,8 @@
     "get_orders": {
       "description": "Get a batch of the Amazon Order history for a given time period, with the Amazon Household members whose Orders the account can view and a cursor to fetch the next batch.",
       "parameters": {
-        "year": "The year for which to get history. Ignored if `time_filter` or `cursor` is provided. Defaults to the current year if neither `year` nor `time_filter` is specified.",
-        "time_filter": "The time filter to use. Supported values are `\"last30\"` (last 30 days), `\"months-3\"` (past 3 months), or `\"year-YYYY\"` (specific year). If provided, this takes precedence over the `year` parameter.",
+        "year": "The year for which to get history. Only one of `year` or `time_filter` may be given, and it's ignored if `cursor` is provided. Defaults to the current year if neither `year` nor `time_filter` is specified.",
+        "time_filter": "The time filter to use. Supported values are `\"last30\"` (last 30 days), `\"months-3\"` (past 3 months), or `\"year-YYYY\"` (specific year). Only one of `year` or `time_filter` may be given.",
         "order_filter": "The order type filter to use, e.g. `\"digital-orders\"` for Kindle and other digital purchases, which the default history doesn't include. If provided, appended alongside the time filter.",
         "family_member_id": "The ID of an Amazon Household member whose Orders to get, such as a linked Teen account, from `household_members`. An account in an Amazon Household gets the whole household's Orders by default; pass `\"self\"` for only its own.",
         "start_index": "The index of the Order from which to start fetching in the history. Ignored if `cursor` is provided.",
@@ -25,7 +25,7 @@
               "properties": {
                 "id": {
                   "type": "string",
-                  "description": "The FamilyMember ID, the value Amazon's household member filter (`householdMembers`) takes."
+                  "description": "The FamilyMember ID, to pass as `family_member_id` to `get_orders`."
                 },
                 "name": {
                   "type": "string",
@@ -56,7 +56,7 @@
                 },
                 "is_whole_foods": {
                   "type": "boolean",
-                  "description": "`True` if this is a Whole Foods Market purchase (an in-store/FOPO purchase or a Whole Foods receipt order). Unlike other unsupported order types, these expose a `grand_total` and (often) an `item_count` on the history page, so those fields are populated."
+                  "description": "`True` if this is a Whole Foods Market purchase (an in-store purchase or a Whole Foods receipt order). Unlike other unsupported order types, these expose a `grand_total` and (often) an `item_count` on the history page, so those fields are populated."
                 },
                 "shipments": {
                   "type": "array",
@@ -76,7 +76,7 @@
                             },
                             "link": {
                               "type": "string",
-                              "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                              "description": "The Item link. `None` for items without an Amazon detail page (e.g. some Whole Foods Market line items)."
                             },
                             "asin": {
                               "type": "string",
@@ -109,6 +109,10 @@
                               "type": "string",
                               "format": "date",
                               "description": "The Item return eligible date."
+                            },
+                            "subscription_frequency": {
+                              "type": "string",
+                              "description": "The Item's Subscribe & Save delivery frequency (e.g. \"Every 2 months\"), `None` if it isn't a subscription."
                             },
                             "image_link": {
                               "type": "string",
@@ -152,7 +156,7 @@
                       },
                       "link": {
                         "type": "string",
-                        "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                        "description": "The Item link. `None` for items without an Amazon detail page (e.g. some Whole Foods Market line items)."
                       },
                       "asin": {
                         "type": "string",
@@ -185,6 +189,10 @@
                         "type": "string",
                         "format": "date",
                         "description": "The Item return eligible date."
+                      },
+                      "subscription_frequency": {
+                        "type": "string",
+                        "description": "The Item's Subscribe & Save delivery frequency (e.g. \"Every 2 months\"), `None` if it isn't a subscription."
                       },
                       "image_link": {
                         "type": "string",
@@ -342,7 +350,7 @@
           },
           "is_whole_foods": {
             "type": "boolean",
-            "description": "`True` if this is a Whole Foods Market purchase (an in-store/FOPO purchase or a Whole Foods receipt order). Unlike other unsupported order types, these expose a `grand_total` and (often) an `item_count` on the history page, so those fields are populated."
+            "description": "`True` if this is a Whole Foods Market purchase (an in-store purchase or a Whole Foods receipt order). Unlike other unsupported order types, these expose a `grand_total` and (often) an `item_count` on the history page, so those fields are populated."
           },
           "shipments": {
             "type": "array",
@@ -362,7 +370,7 @@
                       },
                       "link": {
                         "type": "string",
-                        "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                        "description": "The Item link. `None` for items without an Amazon detail page (e.g. some Whole Foods Market line items)."
                       },
                       "asin": {
                         "type": "string",
@@ -395,6 +403,10 @@
                         "type": "string",
                         "format": "date",
                         "description": "The Item return eligible date."
+                      },
+                      "subscription_frequency": {
+                        "type": "string",
+                        "description": "The Item's Subscribe & Save delivery frequency (e.g. \"Every 2 months\"), `None` if it isn't a subscription."
                       },
                       "image_link": {
                         "type": "string",
@@ -438,7 +450,7 @@
                 },
                 "link": {
                   "type": "string",
-                  "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                  "description": "The Item link. `None` for items without an Amazon detail page (e.g. some Whole Foods Market line items)."
                 },
                 "asin": {
                   "type": "string",
@@ -471,6 +483,10 @@
                   "type": "string",
                   "format": "date",
                   "description": "The Item return eligible date."
+                },
+                "subscription_frequency": {
+                  "type": "string",
+                  "description": "The Item's Subscribe & Save delivery frequency (e.g. \"Every 2 months\"), `None` if it isn't a subscription."
                 },
                 "image_link": {
                   "type": "string",
@@ -651,7 +667,7 @@
                     },
                     "link": {
                       "type": "string",
-                      "description": "The Item link. `None` for items without an Amazon detail page (e.g. ASINLESS Whole Foods Market line items)."
+                      "description": "The Item link. `None` for items without an Amazon detail page (e.g. some Whole Foods Market line items)."
                     },
                     "asin": {
                       "type": "string",
@@ -684,6 +700,10 @@
                       "type": "string",
                       "format": "date",
                       "description": "The Item return eligible date."
+                    },
+                    "subscription_frequency": {
+                      "type": "string",
+                      "description": "The Item's Subscribe & Save delivery frequency (e.g. \"Every 2 months\"), `None` if it isn't a subscription."
                     },
                     "image_link": {
                       "type": "string",

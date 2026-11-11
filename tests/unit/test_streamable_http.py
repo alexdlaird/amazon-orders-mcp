@@ -17,8 +17,8 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.server.mcpserver import MCPServer
 from starlette.types import ASGIApp
 
-from amazonorders_mcp.server import (AUTHORIZATION_ENVIRONMENT_VARIABLE, HEALTH_PATH, create_http_app, create_server,
-                                     main)
+from amazonorders_mcp.server import (AUTHORIZATION_ENVIRONMENT_VARIABLE, FAVICON_PATH, HEALTH_PATH, create_http_app,
+                                     create_server, main)
 from tests.unittestcase import UnitTestCase
 
 BASE_URL = "http://127.0.0.1:8000"
@@ -167,6 +167,18 @@ class TestStreamableHttp(UnitTestCase):
         # THEN
         self.assertEqual(200, response.status_code)
         self.assertEqual("ok", response.text)
+
+    async def test_favicon_needs_no_token(self):
+        # GIVEN
+        app = create_http_app(create_server(self.saved_session), token=BEARER)
+
+        # WHEN
+        response = await self.request(app, "GET", FAVICON_PATH)
+
+        # THEN
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("image/x-icon", response.headers["content-type"])
+        self.assertTrue(response.content.startswith(b"\x00\x00\x01\x00"))
 
     async def test_request_without_token_is_unauthorized(self):
         # GIVEN
