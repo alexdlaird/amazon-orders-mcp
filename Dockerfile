@@ -21,7 +21,7 @@
 # To sign in without being asked, pass `-e AMAZON_USERNAME -e AMAZON_PASSWORD -e AMAZON_OTP_SECRET_KEY` to that one-off
 # container (https://amazon-orders.readthedocs.io/#automating-authentication). Never pass them to the server's.
 
-FROM python:3.12-slim-trixie AS base
+FROM python:3.13-slim-trixie AS base
 
 ENV PYTHONUNBUFFERED=1
 

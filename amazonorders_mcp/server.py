@@ -14,7 +14,6 @@ import anyio
 import uvicorn
 from amazonauth.util import has_display
 from amazonorders.conf import AmazonOrdersConfig
-from amazonorders.entity.family_member import FamilyMember
 from amazonorders.entity.invoice import Invoice
 from amazonorders.entity.order import Order
 from amazonorders.entity.order_search_result import OrderSearchResult
@@ -47,7 +46,6 @@ from amazonorders_mcp.oauth import (
 )
 from amazonorders_mcp.schema import (
     ChargeMatches,
-    FamilyMemberList,
     GiftCardsPage,
     InvoiceList,
     OrderDetails,
@@ -522,19 +520,6 @@ def create_server(saved_session: Optional[SavedSession] = None,
         return InvoiceList.model_validate(result)
 
     @server.tool(annotations=READ_ONLY,
-                 description=tool_description("get_family_members"))
-    async def get_family_members(
-            site: Annotated[Optional[str], SITE] = None,
-            account: Annotated[Optional[str], ACCOUNT] = None
-    ) -> FamilyMemberList:
-        def get(amazon_session: AmazonSession) -> List[FamilyMember]:
-            return AmazonOrders(amazon_session).get_family_members()
-
-        members = await run(get, site, account)
-
-        return FamilyMemberList.model_validate({"items": [member.to_dict(exclude_none=True) for member in members]})
-
-    @server.tool(annotations=READ_ONLY,
                  description=tool_description("get_transactions"))
     async def get_transactions(
             ctx: Context,
@@ -750,7 +735,7 @@ def _empty_orders_note(year: Optional[int],
         places.append(f"No orders so far in {date.today().year}: pass `year` or `time_filter` for earlier ones.")
     if order_filter is None:
         places.append("Digital orders, like Kindle books, aren't in the default history: pass `order_filter` "
-                      "`digital-orders` for those.")
+                      "`digital` for those.")
     return " ".join(places) or None
 
 

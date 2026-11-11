@@ -59,10 +59,6 @@ class OrdersPage(ToolOutput):
     tool = "get_orders"
 
 
-class FamilyMemberList(ToolOutput):
-    tool = "get_family_members"
-
-
 class OrderDetails(ToolOutput):
     tool = "get_order"
 
