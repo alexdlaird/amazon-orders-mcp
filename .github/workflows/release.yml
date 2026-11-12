@@ -179,7 +179,7 @@ jobs:
           path: build/
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v4
+        uses: sigstore/cosign-installer@v4.1.3
 
       - name: Download and verify mcp-publisher
         run: |
