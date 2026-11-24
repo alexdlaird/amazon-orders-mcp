@@ -88,7 +88,7 @@ ogp_custom_meta_tags = [
     '<meta name="twitter:card" content="summary_large_image">',
 ]
 
-google_analytics_id = "G-G9ZXMCVTK2"
+google_analytics_id = "G-7DKJ33P8D3"
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
