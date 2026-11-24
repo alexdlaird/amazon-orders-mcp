@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/3.0.0...HEAD)
+## [Unreleased](https://github.com/alexdlaird/amazon-orders-mcp/compare/3.0.1...HEAD)
+
+## [3.0.1](https://github.com/alexdlaird/amazon-orders-mcp/compare/3.0.0...3.0.1) - 2026-11-24
+
+### Fixed
+
+- Stability and bug fixes.
 
 ## [3.0.0](https://github.com/alexdlaird/amazon-orders-mcp/compare/2.4.1...3.0.0) - 2026-11-11
 
